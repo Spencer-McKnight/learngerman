@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 export type ServiceCheck = {
   name: string;
   ok: boolean;
+  /** Required services drive the overall health status; optional ones don't. */
+  required: boolean;
   detail: string;
 };
 
@@ -31,7 +33,12 @@ export async function checkServices(): Promise<ServiceCheck[]> {
   } else {
     authDetail = "Supabase env vars missing";
   }
-  checks.push({ name: "Supabase Auth", ok: authOk, detail: authDetail });
+  checks.push({
+    name: "Supabase Auth",
+    ok: authOk,
+    required: true,
+    detail: authDetail,
+  });
 
   let dbOk = false;
   let dbDetail = "unreachable";
@@ -49,12 +56,18 @@ export async function checkServices(): Promise<ServiceCheck[]> {
   } catch (err) {
     dbDetail = err instanceof Error ? err.message : "unknown error";
   }
-  checks.push({ name: "Supabase Postgres", ok: dbOk, detail: dbDetail });
+  checks.push({
+    name: "Supabase Postgres",
+    ok: dbOk,
+    required: true,
+    detail: dbDetail,
+  });
 
   const gatewayKeySet = Boolean(process.env.AI_GATEWAY_API_KEY);
   checks.push({
     name: "Vercel AI Gateway",
     ok: gatewayKeySet,
+    required: false,
     detail: gatewayKeySet
       ? "key configured"
       : "AI_GATEWAY_API_KEY not set — needed once the LLM tutor lands",

@@ -31,6 +31,15 @@ Read this first, then the research files as needed: `custom-teaching-methodology
 - Installed for later stages, not yet used: `ts-fsrs`, `ai` (SDK v7), `zod`.
 - Open: `AI_GATEWAY_API_KEY` unset; no Vercel project yet; replace SVG icon with proper PNG/maskable set; Supabase idle-pause keep-alive not yet scheduled.
 
+**2026-08-10 — Stage 2 "Anmeldung" built (auth + persistent sessions).**
+
+- Email/password auth with a single German-first login/signup panel at `/login` (server actions + `useActionState`; optional display name feeds the profiles trigger).
+- "Stay signed in": Supabase refresh tokens never expire by default and the proxy refreshes the JWT on every request — login is a rare event by design. No session timebox configured; leave it that way.
+- Email confirmations disabled via `supabase config push` (config.toml is now the source of truth for remote auth settings; `site_url` = localhost:3000 — must add the production URL to `additional_redirect_urls` when Vercel exists).
+- Whole app gated behind `/login` in the proxy; public exceptions: `/login`, `/auth/*`, `/api/health`.
+- `/api/health` status code now only reflects required services (AI Gateway is informational until the tutor lands).
+- Live-verified against the real project: instant session on signup, trigger-created profile, RLS isolation (own row only, anonymous sees nothing).
+
 ## Open questions (for future sessions to resolve)
 
 - Ability model choice (Elo vs IRT vs Bayesian mastery) for the Birdbrain-style item selection

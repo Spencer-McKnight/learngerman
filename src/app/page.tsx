@@ -1,9 +1,19 @@
 import { checkServices } from "@/lib/health";
+import { createClient } from "@/lib/supabase/server";
+import { logout } from "@/app/login/actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const checks = await checkServices();
+  const supabase = await createClient();
+  const [checks, { data }] = await Promise.all([
+    checkServices(),
+    supabase.auth.getClaims(),
+  ]);
+  const claims = data?.claims;
+  const displayName =
+    (claims?.user_metadata?.display_name as string | undefined) ?? null;
+  const email = (claims?.email as string | undefined) ?? null;
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-10 px-6 py-16">
@@ -12,7 +22,7 @@ export default async function Home() {
           Learn German
         </p>
         <h1 className="font-display text-5xl font-bold tracking-tight">
-          Willkommen.
+          {displayName ? `Willkommen, ${displayName}.` : "Willkommen."}
         </h1>
         <p className="max-w-md text-balance text-muted">
           An adaptive tutor built on comprehensible input — always at your
@@ -33,7 +43,11 @@ export default async function Home() {
               <span
                 aria-hidden
                 className={`mt-1.5 size-2 shrink-0 rounded-full ${
-                  check.ok ? "bg-success" : "bg-error"
+                  check.ok
+                    ? "bg-success"
+                    : check.required
+                      ? "bg-error"
+                      : "bg-muted"
                 }`}
               />
               <div className="min-w-0">
@@ -52,8 +66,20 @@ export default async function Home() {
         </ul>
       </section>
 
-      <footer className="text-xs text-muted">
-        Stage 1 — Fundament · infrastructure &amp; connected services
+      <footer className="flex flex-col items-center gap-2 text-xs text-muted">
+        {email && (
+          <form action={logout} className="flex items-center gap-2">
+            <span>Angemeldet als {email}</span>
+            <span aria-hidden>·</span>
+            <button
+              type="submit"
+              className="font-medium text-accent-bright hover:underline"
+            >
+              Abmelden
+            </button>
+          </form>
+        )}
+        <p>Stage 2 — Anmeldung · authentication &amp; persistent sessions</p>
       </footer>
     </main>
   );
