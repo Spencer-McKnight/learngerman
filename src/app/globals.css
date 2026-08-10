@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens per technology.md — "signage modern".
+ * Porcelain ground, ink text, traffic-blue actions; Ortsschild yellow is
+ * reserved exclusively for milestone moments. Gender colours (der/die/das)
+ * are used everywhere nouns appear, never as the only carrier of meaning.
+ */
+:root {
+  --background: #f7f6f3; /* porcelain */
+  --foreground: #1b1f24; /* ink */
+  --accent: #154889; /* traffic blue */
+  --accent-bright: #1d5fd6; /* interactive variant */
+  --milestone: #f7c600; /* Ortsschild yellow — milestones only */
+  --success: #2f9e44;
+  --error: #e03131;
+  --gender-der: #2563eb;
+  --gender-die: #e03131;
+  --gender-das: #2f9e44;
+  --surface: #ffffff;
+  --muted: #5c6470;
+  --line: #e4e2dc;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #16181d;
+    --foreground: #ecebe7;
+    --accent: #5b8fe0;
+    --accent-bright: #7aa5ec;
+    --surface: #1e2127;
+    --muted: #9aa1ab;
+    --line: #2b2f36;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-milestone: var(--milestone);
+  --color-success: var(--success);
+  --color-error: var(--error);
+  --color-gender-der: var(--gender-der);
+  --color-gender-die: var(--gender-die);
+  --color-gender-das: var(--gender-das);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --font-sans: var(--font-body), system-ui, sans-serif;
+  --font-display: var(--font-display), var(--font-body), system-ui, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body), system-ui, sans-serif;
+}

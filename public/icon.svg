@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Placeholder app icon in the Autobahn-sign language: traffic-blue
+       ground, white border, white wordmark. Replace with proper PNG set
+       (192/512, maskable) before shipping to real devices. -->
+  <rect width="512" height="512" rx="96" fill="#154889"/>
+  <rect x="28" y="28" width="456" height="456" rx="72" fill="none" stroke="#ffffff" stroke-width="20"/>
+  <text x="256" y="300" text-anchor="middle" font-family="Barlow, 'Arial Narrow', Arial, sans-serif" font-weight="700" font-size="200" fill="#ffffff">DE</text>
+  <path d="M136 388h192" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
+  <path d="M296 348l60 40-60 40z" fill="#ffffff"/>
+</svg>
