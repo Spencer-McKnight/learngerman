@@ -40,6 +40,14 @@ Read this first, then the research files as needed: `custom-teaching-methodology
 - `/api/health` status code now only reflects required services (AI Gateway is informational until the tutor lands).
 - Live-verified against the real project: instant session on signup, trigger-created profile, RLS isolation (own row only, anonymous sees nothing).
 
+**2026-08-10 — Stage 3 "Veröffentlichung": GitHub + Vercel live.**
+
+- Private repo: https://github.com/Spencer-McKnight/learngerman (git-connected to Vercel, pushes to main auto-deploy production).
+- Production: https://learngerman-mauve.vercel.app (project `learngerman`, Hobby plan — non-commercial clause applies). Supabase env vars set in all three Vercel environments; secret key marked sensitive.
+- Supabase auth `site_url` now points at production; localhost kept in `additional_redirect_urls` for dev. Remote auth config managed via `supabase config push`.
+- Daily Vercel cron hits `/api/health` (03:00 UTC) — doubles as the Supabase free-tier keep-alive (pauses after 7 idle days).
+- Verified in production: login gate redirect, /login renders, /api/health ok:true, manifest + service worker served.
+
 ## Open questions (for future sessions to resolve)
 
 - Ability model choice (Elo vs IRT vs Bayesian mastery) for the Birdbrain-style item selection
