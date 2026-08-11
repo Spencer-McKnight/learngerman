@@ -45,6 +45,17 @@ export function recognizeGerman(onInterim?: (text: string) => void): Recognizer 
   recognition.maxAlternatives = 1;
   let transcript = "";
   const result = new Promise<string>((resolve) => {
+    // Safety net: an unanswered mic-permission prompt keeps recognition
+    // in "starting" forever with no onend/onerror — never leave the
+    // learner stuck on a listening state.
+    const timeout = setTimeout(() => {
+      recognition.abort();
+      resolve(transcript);
+    }, 15000);
+    const settle = () => {
+      clearTimeout(timeout);
+      resolve(transcript);
+    };
     recognition.onresult = (event) => {
       transcript = Array.from({ length: event.results.length })
         .map((_, i) => event.results[i][0].transcript)
@@ -52,8 +63,8 @@ export function recognizeGerman(onInterim?: (text: string) => void): Recognizer 
         .trim();
       onInterim?.(transcript);
     };
-    recognition.onend = () => resolve(transcript);
-    recognition.onerror = () => resolve(transcript);
+    recognition.onend = settle;
+    recognition.onerror = settle;
   });
   recognition.start();
   return { result, stop: () => recognition.stop() };

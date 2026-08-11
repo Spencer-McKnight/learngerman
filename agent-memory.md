@@ -83,3 +83,15 @@ Read this first, then the research files as needed: `custom-teaching-methodology
 - Per-user FSRS optimisation batch job once review_events pass ~1k per learner
 - Difficulty-weight calibration from aggregated review_events (current weights are research-informed estimates)
 - Live end-to-end pass through placement → session → milestone on the deployed app (desk-tested only so far); replace the placeholder SVG icon with a proper maskable set
+
+**2026-08-11 — Live end-to-end pass (first real-model run).** Full loop verified in browser with fresh learner: placement (45-item probe + C-test + writing + anchor) → session → streak on Heute → honest progress on Weg. Migration `20260811090000` confirmed applied. Bugs found and fixed en route (all small, honest):
+
+- `retrieval-task.tsx` distractor picker: stride-7 walk over a same-POS pool whose size divides 7 (particles: pool of exactly 7) looped forever and froze the tab the moment a particle retrieval rendered. Now bounded scan, same-POS first, topped up from full lexicon.
+- Unhandled gateway errors (rate limits) in `/api/generate` + `/api/converse` returned raw 500s; now caught → same honest 502 "skip" contract the client already renders. Both routes also log contract failures server-side now.
+- `stt.ts`: unanswered mic-permission prompt left recognition (and the learner) stuck on "Höre zu …" forever; 15s safety timeout aborts and resolves with whatever was heard.
+- Root layout: `translate="no"` — Chrome auto-translate rewrote text nodes mid-session (broke React reconciliation, wedged the player) and would translate away the German itself.
+- `package.json` dev script: `next dev --turbopack` (Next 16.3 hard-errors when the Serwist webpack config is present without an explicit bundler flag).
+
+**Model findings (decision owned by user, unchanged):** flash-lite writes natural German and hits required targets, but overruns the closed allowed-vocabulary for `story-read` at beginner size (allowed≈100): 7/7 story attempts failed coverage 76–88% vs the 90% floor. Short `shadowing` (3 sentences) passes, sometimes via the repair loop (`attempt: 2` observed rescuing). Cache verified live: identical spec → 141ms `{ cached: true, attempt: 0 }`. Separate blocker: AI Gateway free tier rate-limits flash-lite after a handful of calls (`GatewayRateLimitError`); configured fallback models did not engage — per current gateway docs `providerOptions.gateway` routing may require the `gateway()` wrapper around the model string, and `sort`/`caching` are not documented options (`order`/`only`/`models`/`user`/`tags`/`cacheControl` are). TTS pipeline (step 3) not started — gated on a healthy tutor loop.
+
+- E2E test learner in remote project: `e2e-1786431431943@learngerman.test` (id `5de60b0e-8857-48a7-9453-71731a0806c5`) — reusable for future passes.

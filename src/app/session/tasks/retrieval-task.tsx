@@ -16,17 +16,21 @@ import { baseOutcome, INDEX, TaskHeading, type TaskProps } from "./shared";
 const GENDERS: Gender[] = ["der", "die", "das"];
 
 function distractorsFor(lexeme: Lexeme): string[] {
+  // Same-POS distractors first, topped up from the whole lexicon when
+  // the pool is small (e.g. particles). Bounded scans — a stride that
+  // shares a factor with the pool size must never spin forever.
   const pool = INDEX.ordered.filter(
     (candidate) => candidate.id !== lexeme.id && candidate.pos === lexeme.pos,
   );
   const fallback = INDEX.ordered.filter((candidate) => candidate.id !== lexeme.id);
-  const source = pool.length >= 3 ? pool : fallback;
   const picked: string[] = [];
-  let cursor = lexeme.rank % source.length;
-  while (picked.length < 3) {
-    const english = source[cursor % source.length].english;
-    if (english !== lexeme.english && !picked.includes(english)) picked.push(english);
-    cursor += 7;
+  for (const source of [pool, fallback]) {
+    if (source.length === 0) continue;
+    const start = (lexeme.rank * 7) % source.length;
+    for (let i = 0; i < source.length && picked.length < 3; i++) {
+      const english = source[(start + i) % source.length].english;
+      if (english !== lexeme.english && !picked.includes(english)) picked.push(english);
+    }
   }
   return picked;
 }

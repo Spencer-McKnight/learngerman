@@ -42,6 +42,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      // Chrome auto-translate rewrites text nodes (breaking React's DOM
+      // reconciliation mid-session) and would translate away the German
+      // a learner is here to read.
+      translate="no"
       className={`${display.variable} ${body.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">

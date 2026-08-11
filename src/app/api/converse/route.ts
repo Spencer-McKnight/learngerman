@@ -99,18 +99,34 @@ export async function POST(request: Request) {
 
   let prompt = basePrompt;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { object } = await generateObject({
-      model: MODEL,
-      system: SYSTEM,
-      prompt,
-      schema: conversationReplySchema,
-      providerOptions: gatewayOptions(data.user.id),
-    });
+    let object: z.infer<typeof conversationReplySchema>;
+    try {
+      ({ object } = await generateObject({
+        model: MODEL,
+        system: SYSTEM,
+        prompt,
+        schema: conversationReplySchema,
+        providerOptions: gatewayOptions(data.user.id),
+      }));
+    } catch (error) {
+      // Gateway/model failures (rate limits, outages) are expected in
+      // operation — return the same honest 502 the client already
+      // handles instead of a raw 500.
+      console.warn("[converse] model call failed:", error);
+      return NextResponse.json(
+        { error: "model call failed; conversation unavailable" },
+        { status: 502 },
+      );
+    }
     const issues = validateGenerated(object.replyDe, spec, index);
     if (issues.length === 0) {
       await putCachedResponse(key, "conversation-turn", object);
       return NextResponse.json({ reply: object, attempt: attempt + 1 });
     }
+    console.warn(
+      `[converse] attempt ${attempt + 1} failed coverage contract:`,
+      issues.map((issue) => issue.detail).join(" | "),
+    );
     prompt = `${basePrompt}\n\nYour previous reply broke these rules — fix them:\n${issues
       .map((issue) => `- ${issue.detail}`)
       .join("\n")}`;

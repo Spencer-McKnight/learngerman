@@ -95,20 +95,32 @@ export async function POST(request: Request) {
 
   let attemptPrompt = prompt;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { object } = await generateObject({
-      model: MODEL,
-      system,
-      prompt: attemptPrompt,
-      schema,
-      providerOptions: gatewayOptions(data.user.id),
-    });
+    let object: unknown;
+    try {
+      ({ object } = await generateObject({
+        model: MODEL,
+        system,
+        prompt: attemptPrompt,
+        schema,
+        providerOptions: gatewayOptions(data.user.id),
+      }));
+    } catch (error) {
+      // Gateway/model failures (rate limits, outages) are expected in
+      // operation — surface the same honest "skip this task" contract
+      // the client already handles instead of a raw 500.
+      console.warn(`[generate] ${spec.kind} model call failed:`, error);
+      return NextResponse.json(
+        { error: "model call failed; task should be skipped" },
+        { status: 502 },
+      );
+    }
     const issues = validateGenerated(germanTextOf(spec.kind as TaskKind, object), spec, index);
     if (issues.length === 0) {
       await putCachedResponse(key, spec.kind, object);
       return NextResponse.json({ content: object, attempt: attempt + 1 });
     }
     console.warn(
-      `[generate] ${spec.kind} attempt ${attempt + 1} failed coverage contract:`,
+      `[generate] ${spec.kind} attempt ${attempt + 1} failed coverage contract (allowed=${spec.allowedLemmas.length}):`,
       issues.map((issue) => issue.detail).join(" | "),
     );
     attemptPrompt = `${prompt}\n\nYour previous attempt broke these rules — fix them:\n${issues
