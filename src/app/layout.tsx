@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Barlow, Inter } from "next/font/google";
+import { PrefsBoot } from "@/components/prefs-boot";
 import "./globals.css";
 
 // DIN-flavoured display face for headings and numbers; humanist body face
@@ -43,7 +44,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${display.variable} ${body.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <PrefsBoot />
+        {children}
+      </body>
     </html>
   );
 }
