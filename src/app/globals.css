@@ -1,36 +1,41 @@
 @import "tailwindcss";
 
 /*
- * Design tokens per technology.md — "signage modern".
- * Porcelain ground, ink text, traffic-blue actions; Ortsschild yellow is
- * reserved exclusively for milestone moments. Gender colours (der/die/das)
- * are used everywhere nouns appear, never as the only carrier of meaning.
+ * Design tokens — "signage modern" with warmth.
+ * Warmer ground, deeper ink, richer accent range. Gender colours
+ * and milestone yellow are load-bearing teaching mechanics.
  */
 :root {
-  --background: #f7f6f3; /* porcelain */
-  --foreground: #1b1f24; /* ink */
-  --accent: #154889; /* traffic blue */
-  --accent-bright: #1d5fd6; /* interactive variant */
-  --milestone: #f7c600; /* Ortsschild yellow — milestones only */
+  --background: #f4f1eb;
+  --foreground: #141719;
+  --accent: #0f3d7a;
+  --accent-bright: #2563eb;
+  --accent-glow: #2563eb20;
+  --milestone: #f7c600;
   --success: #2f9e44;
   --error: #e03131;
   --gender-der: #2563eb;
   --gender-die: #e03131;
   --gender-das: #2f9e44;
   --surface: #ffffff;
-  --muted: #5c6470;
-  --line: #e4e2dc;
+  --surface-warm: #faf8f4;
+  --muted: #6b7280;
+  --line: #ddd8cf;
+  --streak-warm: #f59e0b;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #16181d;
+    --background: #111318;
     --foreground: #ecebe7;
-    --accent: #5b8fe0;
+    --accent: #6b9eff;
     --accent-bright: #7aa5ec;
-    --surface: #1e2127;
+    --accent-glow: #6b9eff18;
+    --surface: #1a1d24;
+    --surface-warm: #1e2128;
     --muted: #9aa1ab;
-    --line: #2b2f36;
+    --line: #282d38;
+    --streak-warm: #fbbf24;
   }
 }
 
@@ -39,6 +44,7 @@
   --color-foreground: var(--foreground);
   --color-accent: var(--accent);
   --color-accent-bright: var(--accent-bright);
+  --color-accent-glow: var(--accent-glow);
   --color-milestone: var(--milestone);
   --color-success: var(--success);
   --color-error: var(--error);
@@ -46,13 +52,14 @@
   --color-gender-die: var(--gender-die);
   --color-gender-das: var(--gender-das);
   --color-surface: var(--surface);
+  --color-surface-warm: var(--surface-warm);
   --color-muted: var(--muted);
   --color-line: var(--line);
+  --color-streak-warm: var(--streak-warm);
   --font-sans: var(--font-body), system-ui, sans-serif;
   --font-display: var(--font-display), var(--font-body), system-ui, sans-serif;
 }
 
-/* Colour-vision-friendly alternative: das → amber instead of green. */
 .das-amber {
   --gender-das: #f08c00;
 }
@@ -63,7 +70,8 @@ body {
   font-family: var(--font-body), system-ui, sans-serif;
 }
 
-/* Milestone sign arrival — a small overshoot, like driving past it. */
+/* ---- Keyframe library ---- */
+
 @keyframes sign-pop {
   0% {
     transform: scale(0.6) rotate(-4deg);
@@ -95,9 +103,123 @@ body {
   animation: fade-up 0.3s ease-out both;
 }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+.animate-shake {
+  animation: shake 0.35s ease-out;
+}
+
+@keyframes ring-out {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  100% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+.animate-ring-out {
+  animation: ring-out 0.4s ease-out both;
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 2.5s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+  50% { box-shadow: 0 0 16px 4px var(--accent-glow); }
+}
+.animate-breathe {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+@keyframes glow-ring {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+.animate-glow-ring {
+  animation: glow-ring 0.6s ease-out both;
+}
+
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-count-up {
+  animation: count-up 0.5s ease-out both;
+}
+
+@keyframes correct-flash {
+  0% { border-color: var(--success); box-shadow: 0 0 0 0 rgba(47, 158, 68, 0.3); }
+  50% { box-shadow: 0 0 0 4px rgba(47, 158, 68, 0.15); }
+  100% { border-color: var(--line); box-shadow: 0 0 0 0 transparent; }
+}
+.animate-correct {
+  animation: correct-flash 0.5s ease-out both;
+}
+
+@keyframes wrong-flash {
+  0% { border-color: var(--error); box-shadow: 0 0 0 0 rgba(224, 49, 49, 0.3); }
+  50% { box-shadow: 0 0 0 4px rgba(224, 49, 49, 0.15); }
+  100% { border-color: var(--line); box-shadow: 0 0 0 0 transparent; }
+}
+.animate-wrong {
+  animation: wrong-flash 0.5s ease-out both;
+}
+
+@keyframes progress-fill {
+  from { transform: scaleX(0); }
+}
+.animate-progress-fill {
+  animation: progress-fill 0.7s ease-out both;
+  transform-origin: left;
+}
+
+/* Staggered fade-up for child elements */
+.stagger-children > * {
+  animation: fade-up 0.35s ease-out both;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 350ms; }
+.stagger-children > *:nth-child(9) { animation-delay: 400ms; }
+.stagger-children > *:nth-child(10) { animation-delay: 450ms; }
+
 @media (prefers-reduced-motion: reduce) {
   .animate-sign-pop,
-  .animate-fade-up {
+  .animate-fade-up,
+  .animate-shake,
+  .animate-ring-out,
+  .animate-pulse-soft,
+  .animate-breathe,
+  .animate-glow-ring,
+  .animate-count-up,
+  .animate-correct,
+  .animate-wrong,
+  .animate-progress-fill {
+    animation: none;
+  }
+  .stagger-children > * {
     animation: none;
   }
 }

@@ -120,9 +120,10 @@ export function composeSession(
   const asDialogue = seed % 2 === 1;
   const storyKind = asDialogue ? "dialogue-read" : "story-read";
   const sentenceCount = Math.max(4, Math.min(12, 4 + Math.round(readingRating * 2)));
+  const allowed = expandAllowed(knownIds, storyTargets, index);
   const storySpec: GenerationSpec = {
     kind: storyKind,
-    allowedLemmas: [...knownIds],
+    allowedLemmas: allowed,
     targetLemmas: storyTargets,
     newLemmas: newIds,
     stage: snapshot.syntax.stage,
@@ -170,7 +171,7 @@ export function composeSession(
       difficulty: itemDifficulty({ taskKind: "cloze-type", dueLexemes: overflowDue.length }),
       generation: {
         kind: "cloze-type",
-        allowedLemmas: [...knownIds],
+        allowedLemmas: expandAllowed(knownIds, overflowDue, index),
         targetLemmas: overflowDue,
         newLemmas: [],
         stage: snapshot.syntax.stage,
@@ -194,7 +195,7 @@ export function composeSession(
     }),
     generation: {
       kind: "shadowing",
-      allowedLemmas: [...knownIds],
+      allowedLemmas: expandAllowed(knownIds, due.slice(0, 2).map((word) => word.lexemeId), index),
       targetLemmas: due.slice(0, 2).map((word) => word.lexemeId),
       newLemmas: [],
       stage: snapshot.syntax.stage,
@@ -233,7 +234,7 @@ export function composeSession(
 
   // --- 9. Speaking task at the current rung (shadowing already served
   // above; higher rungs add their own task).
-  const speakingTask = speakingTaskForRung(snapshot, knownIds, due.slice(0, 3).map((w) => w.lexemeId));
+  const speakingTask = speakingTaskForRung(snapshot, knownIds, due.slice(0, 3).map((w) => w.lexemeId), index);
   if (speakingTask) tasks.push(speakingTask);
 
   // --- 10. Flow-channel check: production extras predicted too hard
@@ -282,11 +283,11 @@ export function composeSession(
           : `Nur wiederholen — ${due.length} Wörter warten`
         : mode === "ear"
           ? english
-            ? "Ear training: can you hear the difference?"
-            : "Ohrtraining: hörst du den Unterschied?"
+            ? "Ear training"
+            : "Ohrtraining"
           : english
-            ? "A speaking round at your level"
-            : "Sprechrunde auf deiner Stufe",
+            ? "Speaking practice"
+            : "Sprechrunde",
     );
   }
 
@@ -299,14 +300,32 @@ export function composeSession(
   };
 }
 
+const MIN_ALLOWED = 30;
+
+function expandAllowed(
+  knownIds: ReadonlySet<string>,
+  targetIds: string[],
+  index: LexiconIndex,
+): string[] {
+  const combined = new Set(knownIds);
+  for (const id of targetIds) combined.add(id);
+  if (combined.size >= MIN_ALLOWED) return [...combined];
+  for (const lexeme of index.ordered) {
+    combined.add(lexeme.id);
+    if (combined.size >= MIN_ALLOWED) break;
+  }
+  return [...combined];
+}
+
 function speakingTaskForRung(
   snapshot: LearnerSnapshot,
   knownIds: Set<string>,
   dueIds: string[],
+  index: LexiconIndex,
 ): TaskSpec | null {
   const rung = snapshot.speakingRung;
   const base: Omit<GenerationSpec, "kind"> = {
-    allowedLemmas: [...knownIds],
+    allowedLemmas: expandAllowed(knownIds, dueIds, index),
     targetLemmas: dueIds,
     newLemmas: [],
     stage: snapshot.syntax.stage,

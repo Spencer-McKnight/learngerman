@@ -1,28 +1,19 @@
 "use client";
 
-/**
- * Shared plumbing for task renderers. Every task reduces to one or
- * more ReviewOutcomes (the engine's atom); scoring runs client-side
- * with the same pure engine functions the tests cover.
- */
-
 import { useEffect, useState } from "react";
-import type { ReviewOutcome, TaskSpec } from "@/lib/engine";
+import type { GenerationSpec, ReviewOutcome, TaskSpec } from "@/lib/engine";
 import { buildIndex, SEED_LEXICON } from "@/lib/engine";
 import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 
-/** The lexicon ships as TypeScript, so the client indexes it locally. */
 export const INDEX = buildIndex(SEED_LEXICON);
 
 export interface TaskProps {
   task: TaskSpec;
-  /** Post one graded outcome (player collects milestones). */
   submit: (outcome: ReviewOutcome) => Promise<void>;
-  /** Advance to the next task. */
   finish: () => void;
-  /** Skip without grading (generation failed, nothing to show). */
   skip: () => void;
+  sparkle?: (x: number, y: number) => void;
 }
 
 export function baseOutcome(
@@ -51,29 +42,74 @@ type Generated<T> =
   | { status: "ready"; content: T }
   | { status: "failed"; content: null };
 
-/** Fetch generated content for a task; the API enforces the coverage
- *  contract and 502s rather than serving incomprehensible German. */
+type CacheEntry = { promise: Promise<unknown>; resolved: boolean; content: unknown | null };
+const generationCache = new Map<string, CacheEntry>();
+
+function cacheKey(spec: GenerationSpec): string {
+  return JSON.stringify(spec);
+}
+
+function fetchGeneration(spec: GenerationSpec): CacheEntry {
+  const key = cacheKey(spec);
+  const existing = generationCache.get(key);
+  if (existing) return existing;
+
+  const entry: CacheEntry = { promise: null!, resolved: false, content: null };
+  entry.promise = fetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(spec),
+  })
+    .then((r) => (r.ok ? r.json() : Promise.reject()))
+    .then((data) => {
+      entry.resolved = true;
+      entry.content = data.content;
+      return data.content;
+    })
+    .catch(() => {
+      entry.resolved = true;
+      entry.content = null;
+      return null;
+    });
+  generationCache.set(key, entry);
+  return entry;
+}
+
+export function prefetchTasks(tasks: TaskSpec[], fromIndex: number) {
+  const LOOKAHEAD = 2;
+  for (let i = fromIndex; i < Math.min(fromIndex + LOOKAHEAD, tasks.length); i++) {
+    const spec = tasks[i].generation;
+    if (spec) fetchGeneration(spec);
+  }
+}
+
 export function useGenerated<T>(task: TaskSpec): Generated<T> {
-  const [state, setState] = useState<Generated<T>>(() =>
-    task.generation
-      ? { status: "loading", content: null }
-      : { status: "failed", content: null },
-  );
+  const [state, setState] = useState<Generated<T>>(() => {
+    if (!task.generation) return { status: "failed", content: null };
+    const entry = generationCache.get(cacheKey(task.generation));
+    if (entry?.resolved && entry.content) return { status: "ready", content: entry.content as T };
+    return { status: "loading", content: null };
+  });
   useEffect(() => {
     if (!task.generation) return;
     let cancelled = false;
-    fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(task.generation),
-    })
-      .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then((data) => {
-        if (!cancelled) setState({ status: "ready", content: data.content as T });
-      })
-      .catch(() => {
-        if (!cancelled) setState({ status: "failed", content: null });
-      });
+    const entry = fetchGeneration(task.generation);
+    if (entry.resolved) {
+      setState(
+        entry.content
+          ? { status: "ready", content: entry.content as T }
+          : { status: "failed", content: null },
+      );
+      return;
+    }
+    entry.promise.then(() => {
+      if (cancelled) return;
+      setState(
+        entry.content
+          ? { status: "ready", content: entry.content as T }
+          : { status: "failed", content: null },
+      );
+    });
     return () => {
       cancelled = true;
     };
@@ -94,7 +130,6 @@ export function GeneratingCard() {
   );
 }
 
-/** Honest failure state: never serve broken content, never fake it. */
 export function FailedCard({ skip }: { skip: () => void }) {
   const t = useStrings();
   return (

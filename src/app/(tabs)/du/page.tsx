@@ -8,8 +8,6 @@ import { SettingsForm } from "./settings-form";
 
 export const dynamic = "force-dynamic";
 
-/** Du — how you learn: session length, challenge, your habit anchor,
- *  device preferences, account, and service health. */
 export default async function Du() {
   const supabase = await createClient();
   const [{ data: claims }, profile, checks, { lang, t }] = await Promise.all([
@@ -31,7 +29,7 @@ export default async function Du() {
   const uiLang = prefs?.uiLang ? parseUiLang(prefs.uiLang) : lang;
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-10">
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-10 stagger-children">
       <header className="flex flex-col gap-1">
         <p className="font-display text-sm font-semibold uppercase tracking-[0.2em] text-accent">
           {t.du.eyebrow}
@@ -57,8 +55,8 @@ export default async function Du() {
             <li key={check.name} className="flex items-center gap-2.5 text-sm">
               <span
                 aria-hidden
-                className={`size-2 shrink-0 rounded-full ${
-                  check.ok ? "bg-success" : check.required ? "bg-error" : "bg-muted"
+                className={`size-2.5 shrink-0 rounded-full transition-colors ${
+                  check.ok ? "bg-success" : check.required ? "bg-error animate-pulse-soft" : "bg-muted"
                 }`}
               />
               <span className="font-medium">{check.name}</span>
@@ -74,8 +72,8 @@ export default async function Du() {
         {email && (
           <form action={logout} className="flex items-center gap-2">
             <span>{t.du.signedInAs(email)}</span>
-            <span aria-hidden>·</span>
-            <button type="submit" className="font-medium text-accent-bright hover:underline">
+            <span aria-hidden>&middot;</span>
+            <button type="submit" className="font-medium text-accent-bright hover:underline transition-colors">
               {t.du.signOut}
             </button>
           </form>

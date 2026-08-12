@@ -5,8 +5,6 @@ import { PrefsBoot } from "@/components/prefs-boot";
 import { getUiLang } from "@/lib/i18n/server";
 import "./globals.css";
 
-// DIN-flavoured display face for headings and numbers; humanist body face
-// with room to breathe — German text runs long and compound-heavy.
 const display = Barlow({
   variable: "--font-display",
   weight: ["500", "600", "700"],
@@ -35,8 +33,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f7f6f3" },
-    { media: "(prefers-color-scheme: dark)", color: "#16181d" },
+    { media: "(prefers-color-scheme: light)", color: "#f4f1eb" },
+    { media: "(prefers-color-scheme: dark)", color: "#111318" },
   ],
 };
 
@@ -45,9 +43,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      // Chrome auto-translate rewrites text nodes (breaking React's DOM
-      // reconciliation mid-session) and would translate away the German
-      // a learner is here to read.
       translate="no"
       className={`${display.variable} ${body.variable} h-full antialiased`}
     >

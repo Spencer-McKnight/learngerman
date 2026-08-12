@@ -1,12 +1,6 @@
 "use client";
 
-/**
- * Retrieval taps: fast form→meaning mapping for today's new words,
- * and for nouns an article retrieval right after — gender colour
- * arrives only as feedback, never as a pre-highlighted answer.
- */
-
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { Gender, Lexeme } from "@/lib/engine";
 import { playCorrect, playWrong } from "@/lib/audio/sound";
 import { GenderedNoun } from "@/components/gender";
@@ -17,9 +11,6 @@ import { baseOutcome, INDEX, TaskHeading, type TaskProps } from "./shared";
 const GENDERS: Gender[] = ["der", "die", "das"];
 
 function distractorsFor(lexeme: Lexeme): string[] {
-  // Same-POS distractors first, topped up from the whole lexicon when
-  // the pool is small (e.g. particles). Bounded scans — a stride that
-  // shares a factor with the pool size must never spin forever.
   const pool = INDEX.ordered.filter(
     (candidate) => candidate.id !== lexeme.id && candidate.pos === lexeme.pos,
   );
@@ -36,7 +27,7 @@ function distractorsFor(lexeme: Lexeme): string[] {
   return picked;
 }
 
-export function RetrievalTask({ task, submit, finish }: TaskProps) {
+export function RetrievalTask({ task, submit, finish, sparkle }: TaskProps) {
   const t = useStrings();
   const lexemes = useMemo(
     () =>
@@ -49,24 +40,63 @@ export function RetrievalTask({ task, submit, finish }: TaskProps) {
   const [phase, setPhase] = useState<"meaning" | "gender" | "feedback">("meaning");
   const [meaningPick, setMeaningPick] = useState<string | null>(null);
   const [genderPick, setGenderPick] = useState<Gender | null>(null);
+  const [feedbackAnim, setFeedbackAnim] = useState<"correct" | "wrong" | null>(null);
   const grades = useRef<Record<string, 1 | 2 | 3 | 4>>({});
   const [busy, setBusy] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const lexeme = lexemes[index];
   const options = useMemo(() => {
     if (!lexeme) return [];
     const all = [lexeme.english, ...distractorsFor(lexeme)];
-    // Deterministic shuffle by rank so options don't jump on re-render.
     return all
       .map((english, i) => ({ english, sort: (lexeme.rank * 13 + i * 7) % 17 }))
       .sort((a, b) => a.sort - b.sort)
       .map((option) => option.english);
   }, [lexeme]);
 
+  const fireSparkle = useCallback(
+    (e: React.MouseEvent) => {
+      if (sparkle) {
+        const rect = (e.target as HTMLElement).getBoundingClientRect();
+        sparkle(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      }
+    },
+    [sparkle],
+  );
+
   if (!lexeme) return null;
 
   const meaningCorrect = meaningPick === lexeme.english;
   const genderCorrect = !lexeme.gender || genderPick === lexeme.gender;
+
+  const handleMeaning = (english: string, e: React.MouseEvent) => {
+    setMeaningPick(english);
+    const correct = english === lexeme.english;
+    if (correct) {
+      playCorrect();
+      fireSparkle(e);
+      setFeedbackAnim("correct");
+    } else {
+      playWrong();
+      setFeedbackAnim("wrong");
+    }
+    setPhase(lexeme.gender ? "gender" : "feedback");
+  };
+
+  const handleGender = (gender: Gender, e: React.MouseEvent) => {
+    setGenderPick(gender);
+    const correct = gender === lexeme.gender;
+    if (correct) {
+      playCorrect();
+      fireSparkle(e);
+      setFeedbackAnim("correct");
+    } else {
+      playWrong();
+      setFeedbackAnim("wrong");
+    }
+    setPhase("feedback");
+  };
 
   const next = async () => {
     grades.current[lexeme.id] = meaningCorrect ? (genderCorrect ? 3 : 2) : 1;
@@ -75,6 +105,7 @@ export function RetrievalTask({ task, submit, finish }: TaskProps) {
       setPhase("meaning");
       setMeaningPick(null);
       setGenderPick(null);
+      setFeedbackAnim(null);
     } else {
       setBusy(true);
       const values = Object.values(grades.current);
@@ -90,18 +121,28 @@ export function RetrievalTask({ task, submit, finish }: TaskProps) {
         title={t.tasks.retrieval.title}
         note={t.tasks.retrieval.note(index + 1, lexemes.length)}
       />
-      <Card className="flex flex-col items-center gap-2 py-8">
-        {phase === "feedback" && lexeme.gender ? (
-          <GenderedNoun
-            gender={lexeme.gender}
-            lemma={lexeme.lemma}
-            className="animate-fade-up font-display text-4xl tracking-tight"
-          />
-        ) : (
-          <p className="font-display text-4xl font-bold tracking-tight">
-            {lexeme.lemma}
-          </p>
-        )}
+      <Card
+        className={`flex flex-col items-center gap-2 py-8 ${
+          feedbackAnim === "correct"
+            ? "animate-correct"
+            : feedbackAnim === "wrong"
+              ? "animate-wrong animate-shake"
+              : ""
+        }`}
+      >
+        <div ref={cardRef}>
+          {phase === "feedback" && lexeme.gender ? (
+            <GenderedNoun
+              gender={lexeme.gender}
+              lemma={lexeme.lemma}
+              className="animate-fade-up font-display text-4xl tracking-tight"
+            />
+          ) : (
+            <p className="font-display text-4xl font-bold tracking-tight">
+              {lexeme.lemma}
+            </p>
+          )}
+        </div>
         {phase === "feedback" && (
           <p className="animate-fade-up text-sm text-muted">{lexeme.english}</p>
         )}
@@ -114,12 +155,7 @@ export function RetrievalTask({ task, submit, finish }: TaskProps) {
               key={english}
               variant="answer"
               className="py-3.5"
-              onClick={() => {
-                setMeaningPick(english);
-                if (english === lexeme.english) playCorrect();
-                else playWrong();
-                setPhase(lexeme.gender ? "gender" : "feedback");
-              }}
+              onClick={(e) => handleMeaning(english, e)}
             >
               {english}
             </Button>
@@ -141,12 +177,7 @@ export function RetrievalTask({ task, submit, finish }: TaskProps) {
                 key={gender}
                 variant="answer"
                 className="py-3.5"
-                onClick={() => {
-                  setGenderPick(gender);
-                  if (gender === lexeme.gender) playCorrect();
-                  else playWrong();
-                  setPhase("feedback");
-                }}
+                onClick={(e) => handleGender(gender, e)}
               >
                 {gender}
               </Button>
@@ -156,7 +187,7 @@ export function RetrievalTask({ task, submit, finish }: TaskProps) {
       )}
 
       {phase === "feedback" && (
-        <div className="mt-auto flex flex-col gap-2">
+        <div className="mt-auto flex flex-col gap-2 animate-fade-up">
           {!(meaningCorrect && genderCorrect) && (
             <p className="text-center text-sm text-muted">
               {t.tasks.retrieval.comesBack}

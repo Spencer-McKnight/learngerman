@@ -25,10 +25,10 @@ function Segmented<T extends string>({
       {options.map((option) => (
         <label
           key={option.value}
-          className={`flex flex-1 cursor-pointer flex-col items-center gap-0.5 rounded-xl border px-2 py-2.5 text-center transition ${
+          className={`flex flex-1 cursor-pointer flex-col items-center gap-0.5 rounded-xl border px-2 py-2.5 text-center transition-all duration-200 ${
             value === option.value
-              ? "border-accent-bright bg-accent/10 font-semibold text-accent-bright"
-              : "border-line text-muted hover:border-accent-bright/50"
+              ? "border-accent-bright bg-accent/10 font-semibold text-accent-bright shadow-sm scale-[1.02]"
+              : "border-line text-muted hover:border-accent-bright/50 hover:shadow-sm"
           }`}
         >
           <input
@@ -65,7 +65,7 @@ function Toggle({
         <span className="block text-xs text-muted">{hint}</span>
       </span>
       <span
-        className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+        className={`relative h-6 w-11 shrink-0 rounded-full transition-all duration-200 ${
           checked ? "bg-accent-bright" : "bg-line"
         }`}
       >
@@ -76,7 +76,7 @@ function Toggle({
           className="sr-only"
         />
         <span
-          className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${
+          className={`absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-all duration-200 ${
             checked ? "left-[22px]" : "left-0.5"
           }`}
         />
@@ -92,8 +92,6 @@ function useInstallPrompt() {
   const [installState, setInstallState] = useState<InstallState>("hidden");
 
   useEffect(() => {
-    // Standalone/iOS detection reads external state; defer the setState
-    // to a frame callback (same idiom as the localStorage prefs below).
     const frame = requestAnimationFrame(() => {
       const standalone =
         window.matchMedia("(display-mode: standalone)").matches ||
@@ -161,8 +159,6 @@ export function SettingsForm({
   const [dasAmber, setDasAmber] = useState(false);
   const { installState, install } = useInstallPrompt();
 
-  // Device prefs live in localStorage; read them after mount (in a
-  // frame callback — the values may differ from the SSR defaults).
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       setSound(soundEnabled());
@@ -174,23 +170,30 @@ export function SettingsForm({
   return (
     <form action={action} className="flex flex-col gap-6">
       <div className="flex flex-col gap-2.5">
-        <SectionLabel>{t.settings.language}</SectionLabel>
+        <SectionLabel>
+          <span className="inline-flex items-center gap-1.5">
+            <SettingsIcon type="language" />
+            {t.settings.language}
+          </span>
+        </SectionLabel>
         <Segmented
           name="uiLang"
           value={uiLang}
           onChange={setUiLang}
           options={[
-            // Language names stay untranslated so a beginner lost in
-            // the wrong language can always find the way out.
             { value: "de", label: "Deutsch" },
             { value: "en", label: "English" },
           ]}
         />
-        <p className="text-xs text-muted">{t.settings.languageNote}</p>
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <SectionLabel>{t.settings.roundLength}</SectionLabel>
+        <SectionLabel>
+          <span className="inline-flex items-center gap-1.5">
+            <SettingsIcon type="clock" />
+            {t.settings.roundLength}
+          </span>
+        </SectionLabel>
         <Segmented
           name="minutes"
           value={minutes}
@@ -202,11 +205,15 @@ export function SettingsForm({
             { value: "15", label: "15 min" },
           ]}
         />
-        <p className="text-xs text-muted">{t.settings.roundLengthNote}</p>
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <SectionLabel>{t.settings.challenge}</SectionLabel>
+        <SectionLabel>
+          <span className="inline-flex items-center gap-1.5">
+            <SettingsIcon type="target" />
+            {t.settings.challenge}
+          </span>
+        </SectionLabel>
         <Segmented
           name="challenge"
           value={challenge}
@@ -221,20 +228,29 @@ export function SettingsForm({
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <SectionLabel>{t.settings.anchor}</SectionLabel>
+        <SectionLabel>
+          <span className="inline-flex items-center gap-1.5">
+            <SettingsIcon type="anchor" />
+            {t.settings.anchor}
+          </span>
+        </SectionLabel>
         <input
           type="text"
           name="plan"
           defaultValue={initialPlan}
           maxLength={140}
           placeholder={t.settings.anchorPlaceholder}
-          className="w-full rounded-lg border border-line bg-background px-3 py-2.5 text-sm outline-none transition focus:border-accent-bright focus:ring-2 focus:ring-accent-bright/30"
+          className="w-full rounded-xl border border-line bg-background px-3 py-2.5 text-sm outline-none transition-all duration-200 focus:border-accent-bright focus:ring-2 focus:ring-accent-glow focus:shadow-md"
         />
-        <p className="text-xs text-muted">{t.settings.anchorNote}</p>
       </div>
 
       <div className="flex flex-col gap-4">
-        <SectionLabel>{t.settings.device}</SectionLabel>
+        <SectionLabel>
+          <span className="inline-flex items-center gap-1.5">
+            <SettingsIcon type="device" />
+            {t.settings.device}
+          </span>
+        </SectionLabel>
         <Toggle
           label={t.settings.sounds}
           hint={t.settings.soundsHint}
@@ -258,7 +274,7 @@ export function SettingsForm({
           <button
             type="button"
             onClick={install}
-            className="flex items-center gap-2.5 rounded-xl border border-line px-3 py-2.5 text-left transition hover:border-accent-bright/50"
+            className="flex items-center gap-2.5 rounded-xl border border-line px-3 py-2.5 text-left transition-all duration-200 hover:border-accent-bright/50 hover:shadow-sm"
           >
             <span className="text-base">📲</span>
             <span>
@@ -284,14 +300,14 @@ export function SettingsForm({
         )}
         {installState === "installed" && (
           <div className="flex items-center gap-2.5 px-3 py-1 text-sm text-muted">
-            <span>✓</span>
+            <span className="text-success">✓</span>
             <span>{t.settings.installedNote}</span>
           </div>
         )}
       </div>
 
       {state.error && (
-        <p role="alert" className="text-sm text-error">
+        <p role="alert" className="text-sm text-error animate-shake">
           {state.error}
         </p>
       )}
@@ -299,5 +315,45 @@ export function SettingsForm({
         {pending ? t.common.oneMoment : state.saved ? t.settings.saved : t.settings.save}
       </Button>
     </form>
+  );
+}
+
+function SettingsIcon({ type }: { type: "language" | "clock" | "target" | "anchor" | "device" }) {
+  const cls = "size-3.5 text-muted";
+  if (type === "language")
+    return (
+      <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10" />
+      </svg>
+    );
+  if (type === "clock")
+    return (
+      <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    );
+  if (type === "target")
+    return (
+      <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="12" r="2" />
+      </svg>
+    );
+  if (type === "anchor")
+    return (
+      <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <circle cx="12" cy="5" r="3" />
+        <line x1="12" x2="12" y1="22" y2="8" />
+        <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
+      </svg>
+    );
+  return (
+    <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+      <line x1="12" x2="12.01" y1="18" y2="18" />
+    </svg>
   );
 }

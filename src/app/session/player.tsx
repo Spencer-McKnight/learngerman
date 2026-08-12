@@ -1,12 +1,5 @@
 "use client";
 
-/**
- * The session player: fetches a composed plan, steps through its
- * tasks, posts every graded outcome, and celebrates only genuine
- * milestone crossings. Leaving early loses nothing — every task's
- * results are already saved.
- */
-
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,6 +8,7 @@ import { MilestoneOverlay } from "@/components/milestone-overlay";
 import { useStrings } from "@/components/i18n-provider";
 import type { UiStrings } from "@/lib/i18n/strings";
 import { Button } from "@/components/ui";
+import { useSparkle } from "@/components/particles";
 import { StoryTask } from "./tasks/story-task";
 import { RetrievalTask } from "./tasks/retrieval-task";
 import { ClozeTask } from "./tasks/cloze-task";
@@ -24,7 +18,7 @@ import { HvptTask } from "./tasks/hvpt-task";
 import { ConstructTask } from "./tasks/construct-task";
 import { ScriptedTask } from "./tasks/scripted-task";
 import { ConversationTask } from "./tasks/conversation-task";
-import type { TaskProps } from "./tasks/shared";
+import { prefetchTasks, type TaskProps } from "./tasks/shared";
 
 type Phase = "loading" | "briefing" | "task" | "done" | "error";
 
@@ -69,6 +63,7 @@ export function SessionPlayer() {
   const t = useStrings();
   const router = useRouter();
   const mode = useSearchParams().get("modus") ?? "full";
+  const { fire, SparkCanvas } = useSparkle();
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [plan, setPlan] = useState<SessionPlan | null>(null);
@@ -97,9 +92,14 @@ export function SessionPlayer() {
         setPlan(data.plan);
         setSessionId(data.sessionId);
         setPhase("briefing");
+        prefetchTasks(data.plan.tasks, 0);
       })
       .catch(() => setPhase("error"));
   }, [mode, router]);
+
+  useEffect(() => {
+    if (plan && taskIndex > 0) prefetchTasks(plan.tasks, taskIndex + 1);
+  }, [plan, taskIndex]);
 
   const submit = useCallback(async (outcome: ReviewOutcome) => {
     for (const id of Object.keys(outcome.lexemeGrades)) wordsTouched.current.add(id);
@@ -167,7 +167,7 @@ export function SessionPlayer() {
 
   if (phase === "briefing") {
     return (
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-5 py-10">
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-5 py-10 stagger-children">
         <div className="flex flex-col gap-2">
           <p className="font-display text-sm font-semibold uppercase tracking-[0.2em] text-accent">
             {modeTitle(mode, t)}
@@ -203,7 +203,7 @@ export function SessionPlayer() {
 
   if (phase === "done") {
     return (
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-5 py-10 text-center">
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-5 py-10 text-center stagger-children">
         <div className="flex flex-col gap-2">
           <p className="font-display text-sm font-semibold uppercase tracking-[0.2em] text-success">
             {t.player.doneEyebrow}
@@ -223,8 +223,11 @@ export function SessionPlayer() {
   }
 
   const task: TaskSpec = plan.tasks[taskIndex];
+  const progressPct = ((taskIndex + 1) / plan.tasks.length) * 100;
+
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-6">
+      {SparkCanvas}
       {showMilestones && (
         <MilestoneOverlay
           events={milestones}
@@ -239,27 +242,22 @@ export function SessionPlayer() {
         <Link
           href="/"
           aria-label={t.player.endRound}
-          className="text-2xl leading-none text-muted transition hover:text-foreground"
+          className="text-2xl leading-none text-muted transition-all duration-200 hover:text-foreground hover:scale-110"
         >
-          ×
+          &times;
         </Link>
-        <div className="flex flex-1 gap-1">
-          {plan.tasks.map((planned, i) => (
-            <div
-              key={i}
-              className={`h-1.5 flex-1 rounded-full transition-colors ${
-                i < taskIndex
-                  ? "bg-success"
-                  : i === taskIndex
-                    ? "bg-accent-bright"
-                    : "bg-line"
-              }`}
-            />
-          ))}
+        <div className="relative flex-1 h-2 rounded-full bg-line overflow-hidden">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-accent to-accent-bright transition-all duration-700 ease-out"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
+        <span className="text-xs font-medium text-muted tabular-nums">
+          {taskIndex + 1}/{plan.tasks.length}
+        </span>
       </header>
       <div key={taskIndex} className="flex flex-1 flex-col gap-4 animate-fade-up">
-        <TaskView task={task} submit={submit} finish={finish} skip={finish} />
+        <TaskView task={task} submit={submit} finish={finish} skip={finish} sparkle={fire} />
       </div>
     </main>
   );
