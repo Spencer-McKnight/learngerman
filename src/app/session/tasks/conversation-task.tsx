@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationReply } from "@/lib/engine";
 import { speakGerman, ttsAvailable } from "@/lib/audio/tts";
 import { recognizeGerman, sttAvailable } from "@/lib/audio/stt";
+import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 import { baseOutcome, FailedCard, TaskHeading, type TaskProps } from "./shared";
 
@@ -20,6 +21,7 @@ interface Message {
 }
 
 export function ConversationTask({ task, submit, finish, skip }: TaskProps) {
+  const t = useStrings();
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [waiting, setWaiting] = useState(false);
@@ -123,8 +125,8 @@ export function ConversationTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
-        title="Quatschen wir"
-        note="Antworte, so gut du kannst — Fehler sind Material, kein Problem."
+        title={t.tasks.conversation.title}
+        note={t.tasks.conversation.note}
       />
       <Card className="flex max-h-[50dvh] flex-col gap-3 overflow-y-auto">
         {messages.map((message, i) => (
@@ -154,7 +156,7 @@ export function ConversationTask({ task, submit, finish, skip }: TaskProps) {
         {waiting && <p className="text-xs text-muted">…</p>}
         {failed && (
           <p className="text-xs text-muted">
-            Die Verbindung hakt — beende das Gespräch einfach unten.
+            {t.tasks.conversation.connectionIssue}
           </p>
         )}
       </Card>
@@ -172,7 +174,7 @@ export function ConversationTask({ task, submit, finish, skip }: TaskProps) {
             onChange={(event) => setDraft(event.target.value)}
             autoCapitalize="sentences"
             autoComplete="off"
-            placeholder="Auf Deutsch …"
+            placeholder={t.common.inGermanPlaceholder}
             className="flex-1 rounded-lg border border-line bg-background px-3 py-2.5 text-[15px] outline-none transition focus:border-accent-bright focus:ring-2 focus:ring-accent-bright/30"
           />
           {sttAvailable() && (
@@ -186,7 +188,7 @@ export function ConversationTask({ task, submit, finish, skip }: TaskProps) {
         </form>
         {(learnerTurns >= 3 || failed) && (
           <Button variant="quiet" disabled={busy} onClick={end}>
-            Gespräch beenden
+            {t.tasks.conversation.endChat}
           </Button>
         )}
       </div>

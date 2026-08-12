@@ -11,6 +11,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { playTap } from "@/lib/audio/sound";
 import { savePlan } from "@/app/(tabs)/du/actions";
+import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 
 type Step = "intro" | "probe" | "ctest" | "schreiben" | "anker" | "ergebnis";
@@ -25,12 +26,6 @@ interface PlacementResponse {
   placement: { vocabEstimate: number; stage: number };
   seededWords: number;
 }
-
-const PLAN_IDEAS = [
-  "Nach dem Morgenkaffee mache ich eine Runde.",
-  "Wenn ich in der Bahn sitze, mache ich eine Runde.",
-  "Nach dem Zähneputzen abends mache ich eine Runde.",
-];
 
 function StepShell({
   children,
@@ -53,6 +48,7 @@ function StepShell({
 }
 
 export function PlacementFlow() {
+  const t = useStrings();
   const router = useRouter();
   const [step, setStep] = useState<Step>("intro");
   const [instrument, setInstrument] = useState<Instrument | null>(null);
@@ -72,7 +68,7 @@ export function PlacementFlow() {
     fetch(`/api/placement?seed=${seed}`)
       .then((response) => (response.ok ? response.json() : Promise.reject()))
       .then(setInstrument)
-      .catch(() => setError("Die Einstufung lässt sich gerade nicht laden."));
+      .catch(() => setError("load"));
   }, []);
 
   const submit = useCallback(
@@ -94,7 +90,7 @@ export function PlacementFlow() {
       });
       setSubmitting(false);
       if (!response.ok) {
-        setError("Das hat nicht geklappt — versuch es gleich noch einmal.");
+        setError("submit");
         return;
       }
       setResult(await response.json());
@@ -107,8 +103,10 @@ export function PlacementFlow() {
     return (
       <StepShell progress={0}>
         <Card className="flex flex-col gap-4">
-          <p className="text-sm">{error}</p>
-          <Button onClick={() => router.push("/")}>Zurück</Button>
+          <p className="text-sm">
+            {error === "load" ? t.placement.loadError : t.placement.submitError}
+          </p>
+          <Button onClick={() => router.push("/")}>{t.common.back}</Button>
         </Card>
       </StepShell>
     );
@@ -119,20 +117,17 @@ export function PlacementFlow() {
       <StepShell progress={0.05}>
         <div className="flex flex-1 flex-col justify-center gap-4">
           <h1 className="font-display text-4xl font-bold tracking-tight">
-            Drei ehrliche Minuten.
+            {t.placement.introTitle}
           </h1>
           <p className="text-[15px] leading-relaxed text-muted">
-            Gleich siehst du Wörter — tippe einfach, ob du sie kennst. Sei
-            ehrlich: Es gibt keine Punkte, und ein paar Wörter sind erfunden.
-            So finden wir genau heraus, wo dein Deutsch heute steht, und fangen
-            exakt dort an.
+            {t.placement.introBody}
           </p>
           <Button
             className="py-3.5 text-base"
             disabled={!instrument}
             onClick={() => setStep("probe")}
           >
-            {instrument ? "Los" : "Lade …"}
+            {instrument ? t.common.go : t.placement.loading}
           </Button>
         </div>
       </StepShell>
@@ -152,7 +147,7 @@ export function PlacementFlow() {
     return (
       <StepShell progress={0.1 + 0.5 * (wordIndex / words.length)}>
         <p className="text-center text-xs font-medium uppercase tracking-wide text-muted">
-          Kennst du dieses Wort? · {wordIndex + 1}/{words.length}
+          {t.placement.knowWord} · {wordIndex + 1}/{words.length}
         </p>
         <div className="flex flex-1 flex-col items-center justify-center">
           <p key={word} className="animate-fade-up font-display text-5xl font-bold tracking-tight">
@@ -161,10 +156,10 @@ export function PlacementFlow() {
         </div>
         <div className="grid grid-cols-2 gap-3 pb-4">
           <Button variant="answer" className="py-5" onClick={() => answer(false)}>
-            Nein
+            {t.placement.no}
           </Button>
           <Button variant="answer" className="py-5" onClick={() => answer(true)}>
-            Kenne ich
+            {t.placement.know}
           </Button>
         </div>
       </StepShell>
@@ -183,10 +178,8 @@ export function PlacementFlow() {
     return (
       <StepShell progress={0.62 + 0.1 * (passageIndex / instrument.ctest.length)}>
         <div className="flex flex-col gap-1.5">
-          <h2 className="font-display text-2xl font-bold">Lückentext (freiwillig)</h2>
-          <p className="text-sm text-muted">
-            Ergänze die fehlenden Buchstaben — oder überspring das einfach.
-          </p>
+          <h2 className="font-display text-2xl font-bold">{t.placement.ctestTitle}</h2>
+          <p className="text-sm text-muted">{t.placement.ctestHint}</p>
         </div>
         <Card>
           <p className="text-[17px] leading-loose">
@@ -214,9 +207,9 @@ export function PlacementFlow() {
           </p>
         </Card>
         <div className="mt-auto flex flex-col gap-2 pb-4">
-          <Button onClick={nextPassage}>Weiter</Button>
+          <Button onClick={nextPassage}>{t.common.continue}</Button>
           <Button variant="quiet" onClick={() => setStep("schreiben")}>
-            Überspringen
+            {t.common.skip}
           </Button>
         </div>
       </StepShell>
@@ -232,12 +225,9 @@ export function PlacementFlow() {
       <StepShell progress={0.78}>
         <div className="flex flex-col gap-1.5">
           <h2 className="font-display text-2xl font-bold">
-            Schreib 2–3 Sätze über dich
+            {t.placement.writeTitle}
           </h2>
-          <p className="text-sm text-muted">
-            Auf Deutsch, so gut es eben geht — Fehler sind hier Gold wert. Oder
-            überspring auch das.
-          </p>
+          <p className="text-sm text-muted">{t.placement.writeHint}</p>
         </div>
         <textarea
           value={text}
@@ -248,14 +238,14 @@ export function PlacementFlow() {
         />
         <div className="mt-auto flex flex-col gap-2 pb-4">
           <Button disabled={submitting} onClick={() => submit(productions, ctestAnswers)}>
-            {submitting ? "Werte aus …" : "Fertig"}
+            {submitting ? t.placement.evaluating : t.common.done}
           </Button>
           <Button
             variant="quiet"
             disabled={submitting}
             onClick={() => submit([], ctestAnswers)}
           >
-            Überspringen
+            {t.common.skip}
           </Button>
         </div>
       </StepShell>
@@ -266,14 +256,11 @@ export function PlacementFlow() {
     return (
       <StepShell progress={0.9}>
         <div className="flex flex-col gap-1.5">
-          <h2 className="font-display text-2xl font-bold">Dein Anker</h2>
-          <p className="text-sm text-muted">
-            Gewohnheiten halten besser als Erinnerungen: Häng deine tägliche
-            Runde an etwas, das du sowieso tust. Wann ist dein Moment?
-          </p>
+          <h2 className="font-display text-2xl font-bold">{t.placement.anchorTitle}</h2>
+          <p className="text-sm text-muted">{t.placement.anchorHint}</p>
         </div>
         <div className="flex flex-col gap-2">
-          {PLAN_IDEAS.map((idea) => (
+          {t.placement.planIdeas.map((idea) => (
             <button
               key={idea}
               type="button"
@@ -289,10 +276,10 @@ export function PlacementFlow() {
           ))}
           <input
             type="text"
-            value={PLAN_IDEAS.includes(plan) ? "" : plan}
+            value={t.placement.planIdeas.includes(plan) ? "" : plan}
             onChange={(event) => setPlan(event.target.value)}
             maxLength={140}
-            placeholder="… oder dein eigener Plan"
+            placeholder={t.placement.ownPlanPlaceholder}
             className="rounded-xl border border-line bg-surface px-4 py-3 text-sm outline-none transition focus:border-accent-bright"
           />
         </div>
@@ -303,10 +290,10 @@ export function PlacementFlow() {
               setStep("ergebnis");
             }}
           >
-            Weiter
+            {t.common.continue}
           </Button>
           <Button variant="quiet" onClick={() => setStep("ergebnis")}>
-            Ohne Anker weiter
+            {t.placement.noAnchor}
           </Button>
         </div>
       </StepShell>
@@ -319,20 +306,20 @@ export function PlacementFlow() {
     <StepShell progress={1}>
       <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
         <h2 className="font-display text-3xl font-bold tracking-tight">
-          {estimate > 0 ? "Du bringst schon etwas mit." : "Wir fangen ganz vorne an."}
+          {estimate > 0 ? t.placement.resultSomething : t.placement.resultZero}
         </h2>
         <p className="max-w-sm text-[15px] leading-relaxed text-muted">
           {estimate > 0
-            ? `Dein Startpunkt: ungefähr ${estimate} deutsche Wörter. Ab jetzt misst die App bei jeder Antwort nach — die Einschätzung wird von allein genauer.`
-            : "Perfekt — der Anfang ist der Teil, den die App am besten kann. Jede Runde bleibt immer knapp über deinem Können."}
+            ? t.placement.resultBodyEstimate(estimate)
+            : t.placement.resultBodyZero}
         </p>
       </div>
       <div className="flex flex-col gap-2 pb-4">
         <Button className="py-3.5 text-base" onClick={() => router.push("/session")}>
-          Erste Runde starten
+          {t.placement.firstRound}
         </Button>
         <Button variant="quiet" onClick={() => router.push("/")}>
-          Später
+          {t.placement.later}
         </Button>
       </div>
     </StepShell>

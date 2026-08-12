@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { buildEarDrill, CONTRASTS } from "@/lib/engine";
 import { speakGerman } from "@/lib/audio/tts";
 import { playCorrect, playWrong } from "@/lib/audio/sound";
+import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 import { baseOutcome, TaskHeading, type TaskProps } from "./shared";
 
@@ -18,6 +19,7 @@ import { baseOutcome, TaskHeading, type TaskProps } from "./shared";
 const DRILL_SEED = Date.now() % 100000;
 
 export function HvptTask({ task, submit, finish, skip }: TaskProps) {
+  const t = useStrings();
   const contrast = CONTRASTS.find((candidate) => candidate.id === task.contrastId);
   const count = Math.max(4, Math.round(task.seconds / 10));
   const drill = useMemo(
@@ -69,14 +71,14 @@ export function HvptTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
-        title={`Ohren: ${contrast.label}`}
-        note={`${contrast.description} · ${index + 1} von ${drill.length}`}
+        title={t.tasks.hvpt.title(contrast.label)}
+        note={`${contrast.description} · ${t.common.nOfM(index + 1, drill.length)}`}
       />
       <Card className="flex flex-col items-center gap-5 py-10">
         <Button variant="outline" className="px-8 py-4 text-base" onClick={play}>
-          {played ? "▶ Nochmal hören" : "▶ Abspielen"}
+          {played ? t.tasks.hvpt.playAgain : t.tasks.hvpt.play}
         </Button>
-        <p className="text-xs text-muted">Welches Wort hast du gehört?</p>
+        <p className="text-xs text-muted">{t.tasks.hvpt.whichWord}</p>
       </Card>
       <div className="mt-auto grid grid-cols-2 gap-3">
         {(["a", "b"] as const).map((side) => {

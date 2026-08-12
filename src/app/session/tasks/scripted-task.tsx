@@ -11,6 +11,7 @@ import { scoreSpeech } from "@/lib/engine";
 import { speakGerman, ttsAvailable } from "@/lib/audio/tts";
 import { recognizeGerman, sttAvailable } from "@/lib/audio/stt";
 import { playCorrect, playWrong } from "@/lib/audio/sound";
+import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 import {
   baseOutcome,
@@ -22,6 +23,7 @@ import {
 } from "./shared";
 
 export function ScriptedTask({ task, submit, finish, skip }: TaskProps) {
+  const t = useStrings();
   const generated = useGenerated<GeneratedDialogue>(task);
   const canListen = useMemo(() => ttsAvailable(), []);
   const canSpeak = useMemo(() => sttAvailable(), []);
@@ -81,9 +83,7 @@ export function ScriptedTask({ task, submit, finish, skip }: TaskProps) {
       <TaskHeading
         title={generated.content.title}
         note={
-          mine
-            ? "Deine Zeile — sprich sie laut."
-            : `${turn.speaker} spricht — hör zu.`
+          mine ? t.tasks.scripted.yourLine : t.tasks.scripted.partnerLine(turn.speaker)
         }
       />
       <Card className="flex flex-col gap-3">
@@ -104,9 +104,9 @@ export function ScriptedTask({ task, submit, finish, skip }: TaskProps) {
         })}
         {verdict && (
           <p className="self-end text-xs text-muted animate-fade-up">
-            {verdict === "great" && "Sauber!"}
-            {verdict === "good" && "Fast alles da."}
-            {verdict === "retry" && "Beim nächsten Mal lockerer — weiter geht's."}
+            {verdict === "great" && t.tasks.scripted.great}
+            {verdict === "good" && t.tasks.scripted.good}
+            {verdict === "retry" && t.tasks.scripted.retry}
           </p>
         )}
       </Card>
@@ -115,38 +115,38 @@ export function ScriptedTask({ task, submit, finish, skip }: TaskProps) {
           <div className="grid grid-cols-2 gap-2">
             {canListen && (
               <Button variant="outline" onClick={() => void speakGerman(turn.de)}>
-                ▶ Anhören
+                {t.common.listen}
               </Button>
             )}
             <Button
               className={canListen ? "" : "col-span-2"}
               onClick={() => advance()}
             >
-              Weiter
+              {t.common.continue}
             </Button>
           </div>
         ) : verdict ? (
           <Button disabled={busy} onClick={() => advance()}>
-            Weiter
+            {t.common.continue}
           </Button>
         ) : canSpeak ? (
           <Button onClick={record} disabled={listening}>
-            {listening ? "● Höre zu …" : "🎙 Sprich deine Zeile"}
+            {listening ? t.tasks.scripted.recording : t.tasks.scripted.speakLine}
           </Button>
         ) : (
           <>
             <p className="text-center text-xs text-muted">
-              Keine Spracherkennung — lies laut und schätz dich ehrlich ein:
+              {t.tasks.scripted.noStt}
             </p>
             <div className="grid grid-cols-3 gap-2">
               <Button variant="answer" disabled={busy} onClick={() => advance(1)}>
-                Schwer
+                {t.tasks.shadow.selfHard}
               </Button>
               <Button variant="answer" disabled={busy} onClick={() => advance(2)}>
-                Ging so
+                {t.tasks.shadow.selfSoso}
               </Button>
               <Button variant="answer" disabled={busy} onClick={() => advance(3)}>
-                Locker
+                {t.tasks.shadow.selfEasy}
               </Button>
             </div>
           </>

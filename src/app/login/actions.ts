@@ -2,24 +2,43 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getUiStrings } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
+import { syncUiLangFromProfile } from "@/app/(tabs)/du/actions";
 
 export type AuthState = { error: string | null };
 
 const loginSchema = z.object({
-  email: z.email("Bitte gib eine gültige E-Mail-Adresse ein."),
-  password: z.string().min(1, "Bitte gib dein Passwort ein."),
+  email: z.email("invalidEmail"),
+  password: z.string().min(1, "passwordRequired"),
 });
 
 const signupSchema = z.object({
-  email: z.email("Bitte gib eine gültige E-Mail-Adresse ein."),
-  password: z.string().min(8, "Das Passwort braucht mindestens 8 Zeichen."),
-  displayName: z
-    .string()
-    .trim()
-    .max(80, "Der Name ist zu lang.")
-    .optional(),
+  email: z.email("invalidEmail"),
+  password: z.string().min(8, "passwordMin"),
+  displayName: z.string().trim().max(80, "nameTooLong").optional(),
 });
+
+/** Zod carries a message *key*; the UI language decides the wording. */
+const AUTH_ERROR_KEYS = [
+  "invalidEmail",
+  "passwordRequired",
+  "passwordMin",
+  "nameTooLong",
+] as const;
+
+async function localizedIssue(message: string): Promise<string> {
+  const { t } = await getUiStrings();
+  const key = AUTH_ERROR_KEYS.find((candidate) => candidate === message);
+  return key
+    ? {
+        invalidEmail: t.login.errorInvalidEmail,
+        passwordRequired: t.login.errorPasswordRequired,
+        passwordMin: t.login.errorPasswordMin,
+        nameTooLong: t.login.errorNameTooLong,
+      }[key]
+    : message;
+}
 
 export async function login(
   _prev: AuthState,
@@ -30,15 +49,18 @@ export async function login(
     password: formData.get("password"),
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
+    return { error: await localizedIssue(parsed.error.issues[0].message) };
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
   if (error) {
-    return { error: "E-Mail oder Passwort stimmt nicht." };
+    const { t } = await getUiStrings();
+    return { error: t.login.errorWrongCredentials };
   }
 
+  // A fresh device starts with no ui-lang cookie; restore the saved one.
+  await syncUiLangFromProfile();
   redirect("/");
 }
 
@@ -52,7 +74,7 @@ export async function signup(
     displayName: formData.get("displayName") ?? undefined,
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
+    return { error: await localizedIssue(parsed.error.issues[0].message) };
   }
 
   const supabase = await createClient();
@@ -64,11 +86,12 @@ export async function signup(
     },
   });
   if (error) {
+    const { t } = await getUiStrings();
     return {
       error:
         error.code === "user_already_exists"
-          ? "Für diese E-Mail gibt es schon ein Konto — melde dich an."
-          : "Das hat leider nicht geklappt. Versuch es noch einmal.",
+          ? t.login.errorAccountExists
+          : t.login.errorSignupFailed,
     };
   }
 

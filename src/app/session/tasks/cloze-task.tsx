@@ -11,6 +11,7 @@ import type { GeneratedCloze } from "@/lib/engine";
 import { scoreTyped } from "@/lib/engine";
 import { playCorrect, playWrong } from "@/lib/audio/sound";
 import { GenderedNoun } from "@/components/gender";
+import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 import {
   baseOutcome,
@@ -23,6 +24,7 @@ import {
 } from "./shared";
 
 export function ClozeTask({ task, submit, finish, skip }: TaskProps) {
+  const t = useStrings();
   const generated = useGenerated<GeneratedCloze>(task);
   const [index, setIndex] = useState(0);
   const [answer, setAnswer] = useState("");
@@ -70,8 +72,8 @@ export function ClozeTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
-        title="Tipp das fehlende Wort"
-        note={`${index + 1} von ${items.length} · Hinweis: ${item.hintEn}`}
+        title={t.tasks.cloze.title}
+        note={`${t.common.nOfM(index + 1, items.length)} · ${t.tasks.cloze.hintLabel(item.hintEn)}`}
       />
       <Card className="flex flex-col gap-4">
         <p className="text-[17px] leading-relaxed">
@@ -110,25 +112,25 @@ export function ClozeTask({ task, submit, finish, skip }: TaskProps) {
               autoCapitalize="none"
               autoComplete="off"
               spellCheck={false}
-              placeholder="Deine Antwort …"
+              placeholder={t.tasks.cloze.placeholder}
               className="flex-1 rounded-lg border border-line bg-background px-3 py-2.5 text-[15px] outline-none transition focus:border-accent-bright focus:ring-2 focus:ring-accent-bright/30"
             />
-            <Button type="submit">Prüfen</Button>
+            <Button type="submit">{t.common.check}</Button>
           </form>
         ) : (
           <div className="flex flex-col gap-1.5 animate-fade-up">
             <p className="text-sm font-medium">
-              {checked.verdict === "correct" && "Richtig!"}
-              {checked.verdict === "typo" && "Kleiner Tippfehler — zählt trotzdem."}
+              {checked.verdict === "correct" && t.tasks.cloze.correct}
+              {checked.verdict === "typo" && t.tasks.cloze.typo}
               {checked.verdict === "wrong" && (
                 <>
-                  Es heißt: <span className="font-semibold">{item.answer}</span>
+                  {t.tasks.cloze.itIs} <span className="font-semibold">{item.answer}</span>
                 </>
               )}
             </p>
             {lexeme?.gender && (
               <p className="text-sm">
-                Merk dir:{" "}
+                {t.tasks.cloze.remember}{" "}
                 <GenderedNoun gender={lexeme.gender} lemma={lexeme.lemma} />
               </p>
             )}
@@ -138,7 +140,7 @@ export function ClozeTask({ task, submit, finish, skip }: TaskProps) {
       {checked && (
         <div className="mt-auto">
           <Button className="w-full" disabled={busy} onClick={next}>
-            Weiter
+            {t.common.continue}
           </Button>
         </div>
       )}

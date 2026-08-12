@@ -12,6 +12,7 @@ import type { GeneratedConstruct, StageObservation } from "@/lib/engine";
 import { analyzeProduction, scoreSentence } from "@/lib/engine";
 import { recognizeGerman, sttAvailable } from "@/lib/audio/stt";
 import { playCorrect, playWrong } from "@/lib/audio/sound";
+import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 import {
   baseOutcome,
@@ -31,6 +32,7 @@ interface ItemResult {
 }
 
 export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
+  const t = useStrings();
   const generated = useGenerated<GeneratedConstruct>(task);
   const timed = task.kind === "timed-recall";
   const canSpeak = useMemo(() => sttAvailable(), []);
@@ -148,8 +150,8 @@ export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
-        title={timed ? "Schnell auf Deutsch" : "Bau den Satz"}
-        note={`${index + 1} von ${items.length} — erst selbst bauen, dann aufdecken.`}
+        title={timed ? t.tasks.construct.titleTimed : t.tasks.construct.titleBuild}
+        note={t.tasks.construct.note(index + 1, items.length)}
       />
       {timed && !checked && (
         <div className="h-1.5 overflow-hidden rounded-full bg-line">
@@ -160,7 +162,7 @@ export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
         </div>
       )}
       <Card className="flex flex-col gap-4">
-        <p className="text-sm text-muted">Sag auf Deutsch:</p>
+        <p className="text-sm text-muted">{t.tasks.construct.sayInGerman}</p>
         <p className="text-[18px] font-medium leading-relaxed">{item.promptEn}</p>
         {!checked ? (
           <form
@@ -179,7 +181,7 @@ export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
                 autoCapitalize="sentences"
                 autoComplete="off"
                 spellCheck={false}
-                placeholder="Auf Deutsch …"
+                placeholder={t.common.inGermanPlaceholder}
                 className="flex-1 rounded-lg border border-line bg-background px-3 py-2.5 text-[15px] outline-none transition focus:border-accent-bright focus:ring-2 focus:ring-accent-bright/30"
               />
               {canSpeak && (
@@ -189,22 +191,22 @@ export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
               )}
             </div>
             <Button type="submit" disabled={!answer.trim()}>
-              Aufdecken
+              {t.tasks.construct.reveal}
             </Button>
           </form>
         ) : (
           <div className="flex flex-col gap-1.5 animate-fade-up">
             <p className="text-[17px] font-semibold">{item.targetDe}</p>
             <p className="text-sm text-muted">
-              {checked.grade >= 3 && "Genau so."}
+              {checked.grade >= 3 && t.tasks.construct.exact}
               {checked.grade === 2 &&
                 (checked.orderIssue
-                  ? "Die Wörter stimmen — die Wortstellung noch nicht ganz."
-                  : "Fast — vergleich mal in Ruhe.")}
-              {checked.grade === 1 && "Schau dir den Satz an — morgen klappt's besser."}
+                  ? t.tasks.construct.orderIssue
+                  : t.tasks.construct.almost)}
+              {checked.grade === 1 && t.tasks.construct.lookAgain}
             </p>
             {answer.trim() && (
-              <p className="text-sm italic text-muted">Du: „{answer.trim()}“</p>
+              <p className="text-sm italic text-muted">{t.tasks.construct.you(answer.trim())}</p>
             )}
           </div>
         )}
@@ -212,7 +214,7 @@ export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
       {checked && (
         <div className="mt-auto">
           <Button className="w-full" disabled={busy} onClick={next}>
-            Weiter
+            {t.common.continue}
           </Button>
         </div>
       )}

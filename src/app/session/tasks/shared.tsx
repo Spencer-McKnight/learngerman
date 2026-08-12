@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import type { ReviewOutcome, TaskSpec } from "@/lib/engine";
 import { buildIndex, SEED_LEXICON } from "@/lib/engine";
+import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 
 /** The lexicon ships as TypeScript, so the client indexes it locally. */
@@ -81,27 +82,26 @@ export function useGenerated<T>(task: TaskSpec): Generated<T> {
 }
 
 export function GeneratingCard() {
+  const t = useStrings();
   return (
     <Card className="flex flex-col items-center gap-3 py-10">
       <span
         aria-hidden
         className="size-6 animate-spin rounded-full border-2 border-line border-t-accent-bright"
       />
-      <p className="text-sm text-muted">Schreibe deinen Text …</p>
+      <p className="text-sm text-muted">{t.tasks.generating}</p>
     </Card>
   );
 }
 
 /** Honest failure state: never serve broken content, never fake it. */
 export function FailedCard({ skip }: { skip: () => void }) {
+  const t = useStrings();
   return (
     <Card className="flex flex-col items-center gap-3 py-8 text-center">
-      <p className="text-sm text-muted">
-        Für diese Aufgabe kam gerade kein brauchbarer Text zustande — wir
-        überspringen sie, statt dir etwas Unverständliches zu geben.
-      </p>
+      <p className="text-sm text-muted">{t.tasks.failedBody}</p>
       <Button variant="outline" onClick={skip}>
-        Weiter
+        {t.common.continue}
       </Button>
     </Card>
   );

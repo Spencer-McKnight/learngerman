@@ -12,6 +12,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MilestoneEvent, ReviewOutcome, SessionPlan, TaskSpec } from "@/lib/engine";
 import { MilestoneOverlay } from "@/components/milestone-overlay";
+import { useStrings } from "@/components/i18n-provider";
+import type { UiStrings } from "@/lib/i18n/strings";
 import { Button } from "@/components/ui";
 import { StoryTask } from "./tasks/story-task";
 import { RetrievalTask } from "./tasks/retrieval-task";
@@ -26,11 +28,14 @@ import type { TaskProps } from "./tasks/shared";
 
 type Phase = "loading" | "briefing" | "task" | "done" | "error";
 
-const MODE_TITLES: Record<string, string> = {
-  review: "Nur wiederholen",
-  ear: "Ohrtraining",
-  speak: "Sprechrunde",
-};
+const modeTitle = (mode: string, t: UiStrings) =>
+  mode === "review"
+    ? t.player.modeReview
+    : mode === "ear"
+      ? t.player.modeEar
+      : mode === "speak"
+        ? t.player.modeSpeak
+        : t.player.modeDefault;
 
 function TaskView(props: TaskProps) {
   switch (props.task.kind) {
@@ -61,6 +66,7 @@ function TaskView(props: TaskProps) {
 }
 
 export function SessionPlayer() {
+  const t = useStrings();
   const router = useRouter();
   const mode = useSearchParams().get("modus") ?? "full";
 
@@ -143,7 +149,7 @@ export function SessionPlayer() {
           aria-hidden
           className="size-7 animate-spin rounded-full border-2 border-line border-t-accent-bright"
         />
-        <p className="text-sm text-muted">Stelle deine Runde zusammen …</p>
+        <p className="text-sm text-muted">{t.player.composing}</p>
       </main>
     );
   }
@@ -151,11 +157,9 @@ export function SessionPlayer() {
   if (phase === "error" || !plan) {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-        <p className="text-sm text-muted">
-          Die Runde lässt sich gerade nicht laden. Versuch es gleich noch einmal.
-        </p>
+        <p className="text-sm text-muted">{t.player.loadError}</p>
         <Link href="/">
-          <Button variant="outline">Zurück</Button>
+          <Button variant="outline">{t.common.back}</Button>
         </Link>
       </main>
     );
@@ -166,11 +170,13 @@ export function SessionPlayer() {
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-5 py-10">
         <div className="flex flex-col gap-2">
           <p className="font-display text-sm font-semibold uppercase tracking-[0.2em] text-accent">
-            {MODE_TITLES[mode] ?? "Deine Runde"}
+            {modeTitle(mode, t)}
           </p>
           <h1 className="font-display text-3xl font-bold tracking-tight">
-            ~{Math.max(1, Math.round(plan.totalSeconds / 60))} Minuten,{" "}
-            {plan.tasks.length} {plan.tasks.length === 1 ? "Aufgabe" : "Aufgaben"}.
+            {t.player.briefingTitle(
+              Math.max(1, Math.round(plan.totalSeconds / 60)),
+              plan.tasks.length,
+            )}
           </h1>
         </div>
         {plan.briefing.length > 0 && (
@@ -185,10 +191,10 @@ export function SessionPlayer() {
         )}
         <div className="flex flex-col gap-2">
           <Button className="py-3.5 text-base" onClick={() => setPhase("task")}>
-            Los
+            {t.common.go}
           </Button>
           <Link href="/" className="text-center text-sm text-muted hover:underline">
-            Doch nicht
+            {t.player.notNow}
           </Link>
         </div>
       </main>
@@ -200,19 +206,17 @@ export function SessionPlayer() {
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-5 py-10 text-center">
         <div className="flex flex-col gap-2">
           <p className="font-display text-sm font-semibold uppercase tracking-[0.2em] text-success">
-            Geschafft
+            {t.player.doneEyebrow}
           </p>
           <h1 className="font-display text-3xl font-bold tracking-tight">
-            Das war deine Runde.
+            {t.player.doneTitle}
           </h1>
           <p className="text-[15px] text-muted">
-            {wordCount > 0
-              ? `${wordCount} Wörter geübt — die Serie ist sicher. Bis morgen!`
-              : "Die Serie ist sicher. Bis morgen!"}
+            {wordCount > 0 ? t.player.donePracticed(wordCount) : t.player.doneStreakSafe}
           </p>
         </div>
         <Button className="py-3.5 text-base" onClick={() => router.push("/")}>
-          Fertig
+          {t.common.done}
         </Button>
       </main>
     );
@@ -234,7 +238,7 @@ export function SessionPlayer() {
       <header className="flex items-center gap-3">
         <Link
           href="/"
-          aria-label="Runde beenden"
+          aria-label={t.player.endRound}
           className="text-2xl leading-none text-muted transition hover:text-foreground"
         >
           ×

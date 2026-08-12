@@ -1,22 +1,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProgressBundle } from "@/lib/progress";
-import { SPEAKING_RUNGS, type CefrBand, type SpeakingRung } from "@/lib/engine";
+import { SPEAKING_RUNGS, type CefrBand } from "@/lib/engine";
+import { getUiStrings } from "@/lib/i18n/server";
+import type { UiStrings } from "@/lib/i18n/strings";
 import { Card, SectionLabel } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 const BANDS: CefrBand[] = ["A0", "A1", "A2", "B1", "B2", "C1"];
 
-const CONFIDENCE_LABEL = (confidence: number) =>
-  confidence >= 0.9 ? "ziemlich sicher" : confidence >= 0.65 ? "ungefähr" : "grobe Schätzung";
-
-const RUNG_LABELS: Record<SpeakingRung, string> = {
-  shadowing: "Nachsprechen",
-  construct: "Sätze bauen",
-  scripted: "Dialog mit Skript",
-  "timed-recall": "Schnell erinnern",
-  "free-conversation": "Freies Gespräch",
-};
+const confidenceLabel = (confidence: number, t: UiStrings) =>
+  confidence >= 0.9
+    ? t.weg.confidenceHigh
+    : confidence >= 0.65
+      ? t.weg.confidenceMid
+      : t.weg.confidenceLow;
 
 /**
  * Der Weg — progress as a journey deeper into Germany. Every number
@@ -27,8 +25,16 @@ export default async function Weg() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user) return null; // proxy gates this route already
-  const bundle = await getProgressBundle(supabase, data.user.id);
+  const [bundle, { t }] = await Promise.all([
+    getProgressBundle(supabase, data.user.id),
+    getUiStrings(),
+  ]);
   const { progress, milestones, canDo, vocabMilestones } = bundle;
+
+  // The German meanings live on the milestone data itself; other
+  // languages override by word-count key.
+  const meaningFor = (milestone: { count: number; meaning: string }) =>
+    t.weg.vocabMeanings[milestone.count] ?? milestone.meaning;
 
   const nextVocab = vocabMilestones.find((m) => m.count > progress.knownWords);
   const prevCount =
@@ -45,17 +51,19 @@ export default async function Weg() {
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-10">
       <header className="flex flex-col gap-1">
         <p className="font-display text-sm font-semibold uppercase tracking-[0.2em] text-accent">
-          Der Weg
+          {t.weg.eyebrow}
         </p>
         <h1 className="font-display text-4xl font-bold tracking-tight">
           {progress.knownWords}{" "}
-          <span className="text-2xl font-semibold text-muted">Wörter</span>
+          <span className="text-2xl font-semibold text-muted">{t.weg.wordsUnit}</span>
         </h1>
-        <p className="text-sm text-muted">{progress.speechCoverageLabel}</p>
+        <p className="text-sm text-muted">
+          {t.weg.coverage(Math.round(progress.speechCoverage * 100))}
+        </p>
       </header>
 
       <Card className="flex flex-col gap-3">
-        <SectionLabel>Wo du stehst</SectionLabel>
+        <SectionLabel>{t.weg.whereYouStand}</SectionLabel>
         <div className="flex items-end justify-between gap-1">
           {BANDS.map((band, i) => {
             const inRange = i >= rangeLow && i <= rangeHigh;
@@ -78,7 +86,7 @@ export default async function Weg() {
           })}
         </div>
         <p className="text-xs text-muted">
-          Einschätzung aus Wortschatz, Können und Satzbau — {CONFIDENCE_LABEL(progress.cefr.confidence)}
+          {t.weg.cefrNote(confidenceLabel(progress.cefr.confidence, t))}
           {progress.cefr.range[0] !== progress.cefr.range[1] &&
             ` (${progress.cefr.range[0]}–${progress.cefr.range[1]})`}
           .
@@ -86,7 +94,7 @@ export default async function Weg() {
       </Card>
 
       <Card className="flex flex-col gap-3">
-        <SectionLabel>Wortschatz-Reise</SectionLabel>
+        <SectionLabel>{t.weg.vocabJourney}</SectionLabel>
         {nextVocab && (
           <div className="flex flex-col gap-1.5">
             <div className="h-2 overflow-hidden rounded-full bg-line">
@@ -96,7 +104,7 @@ export default async function Weg() {
               />
             </div>
             <p className="text-xs text-muted">
-              Nächstes Schild: {nextVocab.count} Wörter — {nextVocab.meaning}
+              {t.weg.nextSign(nextVocab.count, meaningFor(nextVocab))}
             </p>
           </div>
         )}
@@ -116,7 +124,8 @@ export default async function Weg() {
                   {reached ? "✓" : ""}
                 </span>
                 <span className={reached ? "" : "text-muted"}>
-                  <span className="font-semibold">{milestone.count}</span> — {milestone.meaning}
+                  <span className="font-semibold">{milestone.count}</span> —{" "}
+                  {meaningFor(milestone)}
                 </span>
               </li>
             );
@@ -125,12 +134,12 @@ export default async function Weg() {
       </Card>
 
       <Card className="flex flex-col gap-4">
-        <SectionLabel>Können</SectionLabel>
+        <SectionLabel>{t.weg.skills}</SectionLabel>
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between text-sm">
-            <span className="font-medium">Satzbau</span>
+            <span className="font-medium">{t.weg.syntax}</span>
             <span className="text-muted">
-              Stufe {progress.syntaxStage}/5 · {progress.syntaxStageName}
+              {t.weg.stageLine(progress.syntaxStage, progress.syntaxStageName)}
             </span>
           </div>
           <div className="flex gap-1">
@@ -146,8 +155,8 @@ export default async function Weg() {
         </div>
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between text-sm">
-            <span className="font-medium">Sprechen</span>
-            <span className="text-muted">{RUNG_LABELS[progress.speakingRung]}</span>
+            <span className="font-medium">{t.weg.speaking}</span>
+            <span className="text-muted">{t.weg.rungs[progress.speakingRung]}</span>
           </div>
           <div className="flex gap-1">
             {SPEAKING_RUNGS.map((rung, i) => (
@@ -161,17 +170,17 @@ export default async function Weg() {
           </div>
         </div>
         <div className="flex items-center justify-between text-sm">
-          <span className="font-medium">Ohren</span>
-          <span className="text-muted">{progress.contrastsMastered} von 6 Kontrasten sicher</span>
+          <span className="font-medium">{t.weg.ears}</span>
+          <span className="text-muted">{t.weg.contrastsLine(progress.contrastsMastered)}</span>
         </div>
         <div className="flex items-center justify-between text-sm">
-          <span className="font-medium">Gehört &amp; verstanden</span>
-          <span className="text-muted">{progress.inputMinutes} Minuten Deutsch</span>
+          <span className="font-medium">{t.weg.heardUnderstood}</span>
+          <span className="text-muted">{t.weg.inputMinutes(progress.inputMinutes)}</span>
         </div>
       </Card>
 
       <Card className="flex flex-col gap-3">
-        <SectionLabel>Auf deiner Stufe kannst du</SectionLabel>
+        <SectionLabel>{t.weg.canDoLabel}</SectionLabel>
         <ul className="flex flex-col gap-1.5 text-sm text-muted">
           {canDo.map((statement) => (
             <li key={statement} className="flex gap-2">
@@ -184,7 +193,7 @@ export default async function Weg() {
 
       {milestones.length > 0 && (
         <Card className="flex flex-col gap-3">
-          <SectionLabel>Erreichte Schilder</SectionLabel>
+          <SectionLabel>{t.weg.reachedSigns}</SectionLabel>
           <ul className="flex flex-col gap-2.5">
             {milestones.map((event) => (
               <li key={`${event.kind}-${event.label}-${event.achieved_at}`} className="flex items-start gap-2.5">
@@ -196,7 +205,7 @@ export default async function Weg() {
                   <p className="font-semibold">{event.label}</p>
                   <p className="text-xs text-muted">
                     {event.detail} ·{" "}
-                    {new Date(event.achieved_at).toLocaleDateString("de-DE")}
+                    {new Date(event.achieved_at).toLocaleDateString(t.weg.dateLocale)}
                   </p>
                 </div>
               </li>

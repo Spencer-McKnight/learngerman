@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import type { MilestoneEvent } from "@/lib/engine";
 import { playMilestone } from "@/lib/audio/sound";
+import { useStrings } from "./i18n-provider";
 import { Confetti } from "./confetti";
 import { Ortsschild } from "./ortsschild";
 import { Button } from "./ui";
@@ -21,6 +22,7 @@ export function MilestoneOverlay({
   events: MilestoneEvent[];
   onDone: () => void;
 }) {
+  const t = useStrings();
   const [index, setIndex] = useState(0);
   const event = events[index];
 
@@ -34,7 +36,7 @@ export function MilestoneOverlay({
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-[#1b1f24]/85 px-6 backdrop-blur-sm">
       <Confetti burst={index + 1} />
       <p className="font-display text-sm font-semibold uppercase tracking-[0.2em] text-[#f7c600]">
-        Du bist angekommen
+        {t.milestone.arrived}
       </p>
       <div className="animate-sign-pop">
         <Ortsschild label={event.label} detail={event.detail} />
@@ -47,7 +49,7 @@ export function MilestoneOverlay({
           else onDone();
         }}
       >
-        Weiter
+        {t.common.continue}
       </Button>
     </div>
   );

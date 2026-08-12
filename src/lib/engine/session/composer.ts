@@ -84,10 +84,11 @@ const MODE_KINDS: Record<Exclude<SessionMode, "full">, Set<string>> = {
 export function composeSession(
   snapshot: LearnerSnapshot,
   index: LexiconIndex,
-  opts: { seed?: number; mode?: SessionMode } = {},
+  opts: { seed?: number; mode?: SessionMode; briefingLang?: "de" | "en" } = {},
 ): SessionPlan {
   const { now } = snapshot;
   const mode = opts.mode ?? "full";
+  const english = opts.briefingLang === "en";
   const seed = opts.seed ?? now.getDate() + now.getMonth() * 31;
   const budgetSeconds = snapshot.minutesPerSession * 60;
   const tasks: TaskSpec[] = [];
@@ -213,7 +214,7 @@ export function composeSession(
       biteId: bite.id,
       note: bite.title,
     });
-    briefing.push(`Neu heute: ${bite.titleDe}`);
+    briefing.push(english ? `New today: ${bite.title}` : `Neu heute: ${bite.titleDe}`);
   }
 
   // --- 8. HVPT ear pairs when a contrast needs work.
@@ -262,16 +263,30 @@ export function composeSession(
   }
 
   if (mode === "full") {
-    if (due.length > 0) briefing.unshift(`${due.length} Wörter warten auf dich`);
-    if (newIds.length > 0) briefing.push(`${newIds.length} neue Wörter heute`);
+    if (due.length > 0)
+      briefing.unshift(
+        english
+          ? `${due.length} words are waiting for you`
+          : `${due.length} Wörter warten auf dich`,
+      );
+    if (newIds.length > 0)
+      briefing.push(
+        english ? `${newIds.length} new words today` : `${newIds.length} neue Wörter heute`,
+      );
   } else {
     briefing.length = 0;
     briefing.push(
       mode === "review"
-        ? `Nur wiederholen — ${due.length} Wörter warten`
+        ? english
+          ? `Review only — ${due.length} words waiting`
+          : `Nur wiederholen — ${due.length} Wörter warten`
         : mode === "ear"
-          ? "Ohrtraining: hörst du den Unterschied?"
-          : "Sprechrunde auf deiner Stufe",
+          ? english
+            ? "Ear training: can you hear the difference?"
+            : "Ohrtraining: hörst du den Unterschied?"
+          : english
+            ? "A speaking round at your level"
+            : "Sprechrunde auf deiner Stufe",
     );
   }
 

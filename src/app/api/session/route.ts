@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getUiLang } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildIndex, composeSession, progressSummary, SEED_LEXICON } from "@/lib/engine";
 import type { SessionMode } from "@/lib/engine";
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   const mode: SessionMode = body.success ? (body.data.mode ?? "full") : "full";
 
   const snapshot = await loadSnapshot(supabase, data.user.id);
-  const plan = composeSession(snapshot, index, { mode });
+  const plan = composeSession(snapshot, index, { mode, briefingLang: await getUiLang() });
   const { data: session, error } = await supabase
     .from("sessions")
     .insert({ user_id: data.user.id, plan })

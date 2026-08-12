@@ -10,6 +10,7 @@ import { useMemo, useRef, useState } from "react";
 import type { Gender, Lexeme } from "@/lib/engine";
 import { playCorrect, playWrong } from "@/lib/audio/sound";
 import { GenderedNoun } from "@/components/gender";
+import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 import { baseOutcome, INDEX, TaskHeading, type TaskProps } from "./shared";
 
@@ -36,6 +37,7 @@ function distractorsFor(lexeme: Lexeme): string[] {
 }
 
 export function RetrievalTask({ task, submit, finish }: TaskProps) {
+  const t = useStrings();
   const lexemes = useMemo(
     () =>
       (task.lexemeIds ?? [])
@@ -85,8 +87,8 @@ export function RetrievalTask({ task, submit, finish }: TaskProps) {
   return (
     <>
       <TaskHeading
-        title="Was heißt das?"
-        note={`Neues Wort ${index + 1} von ${lexemes.length}`}
+        title={t.tasks.retrieval.title}
+        note={t.tasks.retrieval.note(index + 1, lexemes.length)}
       />
       <Card className="flex flex-col items-center gap-2 py-8">
         {phase === "feedback" && lexeme.gender ? (
@@ -128,8 +130,10 @@ export function RetrievalTask({ task, submit, finish }: TaskProps) {
       {phase === "gender" && (
         <div className="flex flex-col gap-2">
           <p className="text-center text-sm text-muted">
-            {meaningCorrect ? "Genau — " : `Es heißt „${lexeme.english}“ — `}
-            und welcher Artikel?
+            {meaningCorrect
+              ? t.tasks.retrieval.rightPrefix
+              : t.tasks.retrieval.wrongPrefix(lexeme.english)}
+            {t.tasks.retrieval.whichArticle}
           </p>
           <div className="grid grid-cols-3 gap-2">
             {GENDERS.map((gender) => (
@@ -155,11 +159,11 @@ export function RetrievalTask({ task, submit, finish }: TaskProps) {
         <div className="mt-auto flex flex-col gap-2">
           {!(meaningCorrect && genderCorrect) && (
             <p className="text-center text-sm text-muted">
-              Kommt wieder — genau dafür ist die Wiederholung da.
+              {t.tasks.retrieval.comesBack}
             </p>
           )}
           <Button disabled={busy} onClick={next}>
-            Weiter
+            {t.common.continue}
           </Button>
         </div>
       )}

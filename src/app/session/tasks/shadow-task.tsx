@@ -12,6 +12,7 @@ import { scoreSpeech } from "@/lib/engine";
 import { speakGerman, ttsAvailable } from "@/lib/audio/tts";
 import { recognizeGerman, sttAvailable } from "@/lib/audio/stt";
 import { playCorrect, playWrong } from "@/lib/audio/sound";
+import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 import {
   baseOutcome,
@@ -23,6 +24,7 @@ import {
 } from "./shared";
 
 export function ShadowTask({ task, submit, finish, skip }: TaskProps) {
+  const t = useStrings();
   const generated = useGenerated<GeneratedStory>(task);
   const canListen = useMemo(() => ttsAvailable(), []);
   const canSpeak = useMemo(() => sttAvailable(), []);
@@ -81,20 +83,20 @@ export function ShadowTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
-        title="Sprich nach"
-        note={`Satz ${index + 1} von ${sentences.length} — erst hören, dann laut nachsprechen.`}
+        title={t.tasks.shadow.title}
+        note={t.tasks.shadow.note(index + 1, sentences.length)}
       />
       <Card className="flex flex-col items-center gap-5 py-8">
         <p className="text-center text-[19px] font-medium leading-relaxed">{sentence}</p>
         <div className="flex gap-2">
           {canListen && (
             <Button variant="outline" onClick={() => void speakGerman(sentence)}>
-              ▶ Anhören
+              {t.common.listen}
             </Button>
           )}
           {canSpeak && !score && (
             <Button onClick={record} disabled={listening}>
-              {listening ? "● Höre zu …" : "🎙 Nachsprechen"}
+              {listening ? t.tasks.shadow.recording : t.tasks.shadow.record}
             </Button>
           )}
         </div>
@@ -104,13 +106,13 @@ export function ShadowTask({ task, submit, finish, skip }: TaskProps) {
         {score && (
           <div className="flex flex-col items-center gap-1 animate-fade-up">
             <p className="text-sm font-medium">
-              {score.verdict === "great" && "Sauber!"}
-              {score.verdict === "good" && "Fast — ein paar Wörter fehlten."}
-              {score.verdict === "retry" && "Noch einmal hören und probieren?"}
+              {score.verdict === "great" && t.tasks.shadow.great}
+              {score.verdict === "good" && t.tasks.shadow.good}
+              {score.verdict === "retry" && t.tasks.shadow.retry}
             </p>
             {score.missedWords.length > 0 && (
               <p className="text-xs text-muted">
-                Nicht gehört: {score.missedWords.join(", ")}
+                {t.tasks.shadow.missed(score.missedWords.join(", "))}
               </p>
             )}
           </div>
@@ -121,7 +123,7 @@ export function ShadowTask({ task, submit, finish, skip }: TaskProps) {
           <div className="grid grid-cols-2 gap-2">
             {score.verdict === "retry" && (
               <Button variant="outline" onClick={record} disabled={listening}>
-                Nochmal
+                {t.common.again}
               </Button>
             )}
             <Button
@@ -129,25 +131,24 @@ export function ShadowTask({ task, submit, finish, skip }: TaskProps) {
               disabled={busy}
               onClick={() => advance(score.grade)}
             >
-              Weiter
+              {t.common.continue}
             </Button>
           </div>
         ) : (
           !canSpeak && (
             <>
               <p className="text-center text-xs text-muted">
-                Keine Spracherkennung auf diesem Gerät — deine ehrliche
-                Selbsteinschätzung:
+                {t.tasks.shadow.noStt}
               </p>
               <div className="grid grid-cols-3 gap-2">
                 <Button variant="answer" disabled={busy} onClick={() => advance(1)}>
-                  Schwer
+                  {t.tasks.shadow.selfHard}
                 </Button>
                 <Button variant="answer" disabled={busy} onClick={() => advance(2)}>
-                  Ging so
+                  {t.tasks.shadow.selfSoso}
                 </Button>
                 <Button variant="answer" disabled={busy} onClick={() => advance(3)}>
-                  Locker
+                  {t.tasks.shadow.selfEasy}
                 </Button>
               </div>
             </>

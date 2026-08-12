@@ -2,32 +2,35 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useStrings } from "@/components/i18n-provider";
+import type { UiStrings } from "@/lib/i18n/strings";
 
-const TABS = [
+const TABS: { href: string; label: (t: UiStrings) => string; path: string }[] = [
   {
     href: "/",
-    label: "Heute",
+    label: (t) => t.tabs.today,
     // House — today's practice lives here.
     path: "M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5",
   },
   {
     href: "/weg",
-    label: "Weg",
+    label: (t) => t.tabs.path,
     // Signpost — the journey through Germany.
-    path: "M12 3v3m0 12v3m-6-9h10.5l2.5-2.5L16.5 7H6a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1Zm0 0v0",
+    path: "M12 2v20M12 5h7l-2.5 3L19 11H12V5Z",
   },
   {
     href: "/du",
-    label: "Du",
+    label: (t) => t.tabs.you,
     path: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0",
   },
 ];
 
 export function TabBar() {
   const pathname = usePathname();
+  const t = useStrings();
   return (
     <nav
-      aria-label="Hauptnavigation"
+      aria-label={t.tabs.mainNav}
       className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]"
     >
       <div className="mx-auto flex max-w-md">
@@ -55,7 +58,7 @@ export function TabBar() {
               >
                 <path d={tab.path} />
               </svg>
-              {tab.label}
+              {tab.label(t)}
             </Link>
           );
         })}

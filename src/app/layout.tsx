@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Barlow, Inter } from "next/font/google";
+import { I18nProvider } from "@/components/i18n-provider";
 import { PrefsBoot } from "@/components/prefs-boot";
+import { getUiLang } from "@/lib/i18n/server";
 import "./globals.css";
 
 // DIN-flavoured display face for headings and numbers; humanist body face
@@ -38,7 +40,8 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const uiLang = await getUiLang();
   return (
     <html
       lang="en"
@@ -50,7 +53,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <PrefsBoot />
-        {children}
+        <I18nProvider lang={uiLang}>{children}</I18nProvider>
       </body>
     </html>
   );

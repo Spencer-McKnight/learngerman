@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { getUiStrings } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { LoginPanel } from "./login-form";
 
-export const metadata: Metadata = {
-  title: "Anmelden",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getUiStrings();
+  return { title: t.login.signIn };
+}
 
 export default async function LoginPage() {
   const supabase = await createClient();

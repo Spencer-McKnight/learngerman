@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { login, signup, type AuthState } from "./actions";
+import { useStrings, useUiLang } from "@/components/i18n-provider";
 
 const initialState: AuthState = { error: null };
 
@@ -13,7 +14,15 @@ const inputClasses =
 const labelClasses =
   "mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted";
 
-function SubmitButton({ label, pending }: { label: string; pending: boolean }) {
+function SubmitButton({
+  label,
+  pendingLabel,
+  pending,
+}: {
+  label: string;
+  pendingLabel: string;
+  pending: boolean;
+}) {
   return (
     <button
       type="submit"
@@ -21,7 +30,7 @@ function SubmitButton({ label, pending }: { label: string; pending: boolean }) {
       className="w-full rounded-lg bg-accent py-2.5 text-sm font-semibold
         text-white transition hover:bg-accent-bright disabled:opacity-60"
     >
-      {pending ? "Einen Moment …" : label}
+      {pending ? pendingLabel : label}
     </button>
   );
 }
@@ -36,6 +45,8 @@ function ErrorNote({ error }: { error: string | null }) {
 }
 
 export function LoginPanel() {
+  const t = useStrings();
+  const uiLang = useUiLang();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [loginState, loginAction, loginPending] = useActionState(
     login,
@@ -52,12 +63,10 @@ export function LoginPanel() {
     <section className="w-full max-w-sm rounded-2xl border border-line bg-surface p-8 shadow-sm">
       <header className="mb-6 flex flex-col gap-1.5">
         <h1 className="font-display text-3xl font-bold tracking-tight">
-          {isLogin ? "Willkommen zurück." : "Los geht's."}
+          {isLogin ? t.login.titleLogin : t.login.titleSignup}
         </h1>
         <p className="text-sm text-muted">
-          {isLogin
-            ? "Melde dich an und mach weiter, wo du warst."
-            : "Erstelle dein Konto — kostenlos."}
+          {isLogin ? t.login.subLogin : t.login.subSignup}
         </p>
       </header>
 
@@ -68,14 +77,14 @@ export function LoginPanel() {
         {!isLogin && (
           <div>
             <label htmlFor="displayName" className={labelClasses}>
-              Name <span className="normal-case">(optional)</span>
+              {t.login.name} <span className="normal-case">{t.login.optional}</span>
             </label>
             <input
               id="displayName"
               name="displayName"
               type="text"
               autoComplete="name"
-              placeholder="Wie sollen wir dich nennen?"
+              placeholder={t.login.namePlaceholder}
               className={inputClasses}
             />
           </div>
@@ -83,7 +92,7 @@ export function LoginPanel() {
 
         <div>
           <label htmlFor="email" className={labelClasses}>
-            E-Mail
+            {t.login.email}
           </label>
           <input
             id="email"
@@ -97,7 +106,7 @@ export function LoginPanel() {
 
         <div>
           <label htmlFor="password" className={labelClasses}>
-            Passwort
+            {t.login.password}
           </label>
           <input
             id="password"
@@ -113,26 +122,33 @@ export function LoginPanel() {
         <ErrorNote error={isLogin ? loginState.error : signupState.error} />
 
         <SubmitButton
-          label={isLogin ? "Anmelden" : "Konto erstellen"}
+          label={isLogin ? t.login.signIn : t.login.createAccount}
+          pendingLabel={t.common.oneMoment}
           pending={isLogin ? loginPending : signupPending}
         />
       </form>
 
       <p className="mt-5 text-center text-sm text-muted">
-        {isLogin ? "Neu hier?" : "Schon ein Konto?"}{" "}
+        {isLogin ? t.login.newHere : t.login.haveAccount}{" "}
         <button
           type="button"
           onClick={() => setMode(isLogin ? "signup" : "login")}
           className="font-medium text-accent-bright hover:underline"
         >
-          {isLogin ? "Konto erstellen" : "Anmelden"}
+          {isLogin ? t.login.createAccount : t.login.signIn}
         </button>
       </p>
 
       <p className="mt-6 border-t border-line pt-4 text-center text-xs text-muted">
-        Du bleibst auf diesem Gerät angemeldet.
-        <br />
-        <span className="opacity-75">You&apos;ll stay signed in on this device.</span>
+        {t.login.staySignedIn}
+        {uiLang === "de" && (
+          <>
+            <br />
+            <span className="opacity-75">
+              You&apos;ll stay signed in on this device.
+            </span>
+          </>
+        )}
       </p>
     </section>
   );

@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import type { GeneratedDialogue, GeneratedStory } from "@/lib/engine";
 import { speakGerman, stopSpeaking, ttsAvailable } from "@/lib/audio/tts";
 import { playTap } from "@/lib/audio/sound";
+import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 import {
   baseOutcome,
@@ -67,6 +68,7 @@ function TappableLine({
 }
 
 export function StoryTask({ task, submit, finish, skip }: TaskProps) {
+  const t = useStrings();
   const generated = useGenerated<GeneratedStory | GeneratedDialogue>(task);
   const audioFirst = task.kind === "listen-clip";
   const [textShown, setTextShown] = useState(!audioFirst);
@@ -114,9 +116,13 @@ export function StoryTask({ task, submit, finish, skip }: TaskProps) {
     <>
       <TaskHeading
         title={
-          audioFirst ? "Hör zu" : task.kind === "dialogue-read" ? "Lies mit" : "Lies"
+          audioFirst
+            ? t.tasks.story.titleListen
+            : task.kind === "dialogue-read"
+              ? t.tasks.story.titleDialogue
+              : t.tasks.story.titleRead
         }
-        note={task.note ?? "Tippe auf markierte Wörter, wenn du sie brauchst."}
+        note={task.note ?? t.tasks.story.tapNote}
       />
       <Card className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-2">
@@ -127,7 +133,7 @@ export function StoryTask({ task, submit, finish, skip }: TaskProps) {
               className="px-3 py-1.5 text-xs"
               onClick={() => void speakGerman(fullText)}
             >
-              ▶ Anhören
+              {t.common.listen}
             </Button>
           )}
         </div>
@@ -150,7 +156,7 @@ export function StoryTask({ task, submit, finish, skip }: TaskProps) {
           </div>
         ) : (
           <Button variant="outline" onClick={() => setTextShown(true)}>
-            Text zeigen
+            {t.tasks.story.showText}
           </Button>
         )}
         {textShown && (
@@ -159,17 +165,17 @@ export function StoryTask({ task, submit, finish, skip }: TaskProps) {
             onClick={() => setGistShown(!gistShown)}
             className="self-start text-xs font-medium text-accent-bright hover:underline"
           >
-            {gistShown ? content.englishGist : "Worum ging es? (English)"}
+            {gistShown ? content.englishGist : t.tasks.story.gistQuestion}
           </button>
         )}
       </Card>
       {textShown && (
         <div className="mt-auto grid grid-cols-2 gap-3">
           <Button variant="outline" disabled={busy} onClick={() => complete(false)}>
-            War schwer
+            {t.tasks.story.hard}
           </Button>
           <Button disabled={busy} onClick={() => complete(true)}>
-            Verstanden
+            {t.tasks.story.understood}
           </Button>
         </div>
       )}

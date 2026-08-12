@@ -9,10 +9,13 @@
 
 import { useEffect, useState } from "react";
 import { CURRICULUM } from "@/lib/engine";
+import { useStrings, useUiLang } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 import { baseOutcome, TaskHeading, type TaskProps } from "./shared";
 
 export function GrammarTask({ task, submit, finish, skip }: TaskProps) {
+  const t = useStrings();
+  const uiLang = useUiLang();
   const bite = CURRICULUM.find((candidate) => candidate.id === task.biteId);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -21,11 +24,14 @@ export function GrammarTask({ task, submit, finish, skip }: TaskProps) {
   if (!bite) return null;
   return (
     <>
-      <TaskHeading title={bite.titleDe} note={bite.title} />
+      <TaskHeading
+        title={uiLang === "de" ? bite.titleDe : bite.title}
+        note={uiLang === "de" ? bite.title : bite.titleDe}
+      />
       <Card className="flex flex-col gap-4">
         <p className="text-[16px] leading-relaxed">{bite.summary}</p>
         <p className="rounded-lg bg-background px-3 py-2 text-sm text-muted">
-          Ab jetzt in deinen Aufgaben: {bite.drillFocus}.
+          {t.tasks.grammar.fromNow(bite.drillFocus)}
         </p>
       </Card>
       <div className="mt-auto">
@@ -38,7 +44,7 @@ export function GrammarTask({ task, submit, finish, skip }: TaskProps) {
             finish();
           }}
         >
-          Verstanden — weiter
+          {t.tasks.grammar.gotIt}
         </Button>
       </div>
     </>
