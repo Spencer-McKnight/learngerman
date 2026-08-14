@@ -1,14 +1,15 @@
 "use client";
 
 /**
- * Typed cloze for the shakiest due words. Scored with the engine's
- * honest typed-answer grader: umlaut fallbacks are free, one slip is
- * a typo ("zählt trotzdem"), never a failure.
+ * Typed cloze that rebuilds lines of the scene the learner just read —
+ * recall inside a context they already understand, not an isolated
+ * drill sentence. Scored with the engine's honest typed-answer grader:
+ * umlaut fallbacks are free, one slip is a typo ("zählt trotzdem"),
+ * never a failure.
  */
 
-import { useEffect, useRef, useState } from "react";
-import type { GeneratedCloze } from "@/lib/engine";
-import { scoreTyped } from "@/lib/engine";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { scoreTyped, usableClozeItems } from "@/lib/engine";
 import { playCorrect, playWrong } from "@/lib/audio/sound";
 import { GenderedNoun } from "@/components/gender";
 import { useStrings } from "@/components/i18n-provider";
@@ -17,15 +18,25 @@ import {
   baseOutcome,
   FailedCard,
   GeneratingCard,
+  glossMapOf,
+  GlossText,
   INDEX,
   TaskHeading,
-  useGenerated,
+  useEpisode,
   type TaskProps,
 } from "./shared";
 
+/** The lexeme a cloze item actually grades (trusting forms over ids). */
+function resolvedLexemeId(answer: string, claimed: string): string | null {
+  const token = answer.trim().toLowerCase().replace(/[^\p{L}'’-]/gu, "");
+  const ids = INDEX.byForm.get(token) ?? [];
+  if (ids.includes(claimed)) return claimed;
+  return ids[0] ?? (INDEX.byId.has(claimed) ? claimed : null);
+}
+
 export function ClozeTask({ task, submit, finish, skip }: TaskProps) {
   const t = useStrings();
-  const generated = useGenerated<GeneratedCloze>(task);
+  const { status, episode } = useEpisode();
   const [index, setIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [checked, setChecked] = useState<ReturnType<typeof scoreTyped> | null>(null);
@@ -33,16 +44,22 @@ export function ClozeTask({ task, submit, finish, skip }: TaskProps) {
   const [busy, setBusy] = useState(false);
   const shownAt = useRef(0);
 
+  const items = useMemo(
+    () => (episode ? usableClozeItems(episode, task.lexemeIds ?? [], INDEX) : []),
+    [episode, task.lexemeIds],
+  );
+  const glosses = useMemo(() => glossMapOf(episode), [episode]);
+
   useEffect(() => {
     shownAt.current = Date.now();
   }, [index]);
 
-  if (generated.status === "loading") return <GeneratingCard />;
-  if (generated.status === "failed" || !generated.content) return <FailedCard skip={skip} />;
+  if (status === "loading") return <GeneratingCard />;
+  if (status === "failed" || !episode || items.length === 0) return <FailedCard skip={skip} />;
 
-  const items = generated.content.items;
   const item = items[index];
-  const lexeme = INDEX.byId.get(item.lexemeId);
+  const lexemeId = resolvedLexemeId(item.answer, item.lexemeId);
+  const lexeme = lexemeId ? INDEX.byId.get(lexemeId) : undefined;
 
   const check = () => {
     if (!answer.trim()) return;
@@ -50,7 +67,7 @@ export function ClozeTask({ task, submit, finish, skip }: TaskProps) {
       latencyMs: Date.now() - shownAt.current,
     });
     setChecked(score);
-    grades.current[item.lexemeId] = score.grade;
+    if (lexemeId) grades.current[lexemeId] = score.grade;
     if (score.verdict === "wrong") playWrong();
     else playCorrect();
   };
@@ -72,6 +89,7 @@ export function ClozeTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
+        intro={t.tasks.intro.cloze}
         title={t.tasks.cloze.title}
         note={`${t.common.nOfM(index + 1, items.length)} · ${t.tasks.cloze.hintLabel(item.hintEn)}`}
       />
@@ -79,7 +97,7 @@ export function ClozeTask({ task, submit, finish, skip }: TaskProps) {
         <p className="text-[17px] leading-relaxed">
           {item.sentence.split("___").map((part, i, parts) => (
             <span key={i}>
-              {part}
+              <GlossText text={part} glosses={glosses} />
               {i < parts.length - 1 && (
                 <span
                   className={`mx-1 inline-block min-w-16 rounded-md border-b-2 px-1 text-center font-semibold ${

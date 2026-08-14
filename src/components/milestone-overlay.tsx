@@ -22,7 +22,6 @@ export function MilestoneOverlay({
 
   useEffect(() => {
     if (!event) return;
-    setShowSign(false);
     playMilestone();
     const timer = setTimeout(() => setShowSign(true), 400);
     return () => clearTimeout(timer);
@@ -54,8 +53,12 @@ export function MilestoneOverlay({
           variant="outline"
           className="relative min-w-40 animate-fade-up border-[#f7c600]/30 text-white hover:border-[#f7c600]/60"
           onClick={() => {
-            if (index + 1 < events.length) setIndex(index + 1);
-            else onDone();
+            if (index + 1 < events.length) {
+              setShowSign(false);
+              setIndex(index + 1);
+            } else {
+              onDone();
+            }
           }}
         >
           {t.common.continue}

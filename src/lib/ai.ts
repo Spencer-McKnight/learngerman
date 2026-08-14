@@ -2,25 +2,31 @@ import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * Model routed through the Vercel AI Gateway. Language tasks here are
- * simple enough for the cheapest capable tier — gemini-2.5-flash-lite
- * is $0.10/M in, $0.40/M out (vs $0.30/$2.50 for plain flash). Swap
- * via env without a deploy.
+ * Models routed through the Vercel AI Gateway, tiered by what the call
+ * carries. The episode is ONE call per session and every task hangs
+ * off it, so it gets a properly capable model; conversation turns are
+ * small and latency-sensitive, so they ride the fast tier. Swap via
+ * env without a deploy.
  */
-export const MODEL = process.env.AI_MODEL ?? "google/gemini-2.5-flash-lite";
+export const EPISODE_MODEL = process.env.AI_MODEL ?? "google/gemini-2.5-flash";
+export const CHAT_MODEL = process.env.AI_CHAT_MODEL ?? "google/gemini-2.5-flash-lite";
 
 /**
- * Gateway provider options: route to the cheapest provider first, let
- * providers prompt-cache our large repeated system/word-list prefixes,
- * and fall back to the next-cheapest models if the primary is down.
- * `user` ties spend and rate limits to the learner in the dashboard.
+ * Fallback models when the primary errors or is rate-limited. Both
+ * defaults are AI-Gateway-free-tier accessible (verified live:
+ * gemini-2.5-flash/-lite → 200; haiku-4.5 and gpt-5-nano are paid).
+ * Note: gateway routing options only take effect with the `gateway()`
+ * model wrapper — a plain model string ignores providerOptions.gateway
+ * (current gateway docs: `sort`/`caching` are not options;
+ * `models`/`order`/`only`/`user`/`tags`/`cacheControl` are).
  */
+const FALLBACK_MODELS = ["google/gemini-2.5-flash-lite", "anthropic/claude-haiku-4.5"];
+
+/** Gateway provider options: failover chain + per-learner attribution. */
 export function gatewayOptions(userId?: string) {
   return {
     gateway: {
-      sort: "cost",
-      caching: "auto",
-      models: ["openai/gpt-5-nano", "google/gemini-2.5-flash"],
+      models: FALLBACK_MODELS,
       tags: ["app:learngerman"],
       ...(userId ? { user: userId } : {}),
     },
@@ -70,13 +76,14 @@ export async function getCachedResponse(key: string): Promise<unknown | null> {
 /** Store a response that passed validation. Best-effort. */
 export async function putCachedResponse(
   key: string,
+  model: string,
   kind: string,
   content: unknown,
 ): Promise<void> {
   remember(key, content);
   try {
     const supabase = createAdminClient();
-    await supabase.from("ai_response_cache").upsert({ key, model: MODEL, kind, content });
+    await supabase.from("ai_response_cache").upsert({ key, model, kind, content });
   } catch {
     // Cache write is an optimisation, never a failure.
   }

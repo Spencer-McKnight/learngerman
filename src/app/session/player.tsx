@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { MilestoneEvent, ReviewOutcome, SessionPlan, TaskSpec } from "@/lib/engine";
+import type {
+  Episode,
+  MilestoneEvent,
+  ReviewOutcome,
+  SessionPlan,
+  TaskSpec,
+} from "@/lib/engine";
 import { MilestoneOverlay } from "@/components/milestone-overlay";
 import { useStrings } from "@/components/i18n-provider";
 import type { UiStrings } from "@/lib/i18n/strings";
@@ -18,7 +24,7 @@ import { HvptTask } from "./tasks/hvpt-task";
 import { ConstructTask } from "./tasks/construct-task";
 import { ScriptedTask } from "./tasks/scripted-task";
 import { ConversationTask } from "./tasks/conversation-task";
-import { prefetchTasks, type TaskProps } from "./tasks/shared";
+import { EpisodeProvider, type EpisodeState, type TaskProps } from "./tasks/shared";
 
 type Phase = "loading" | "briefing" | "task" | "done" | "error";
 
@@ -68,6 +74,12 @@ export function SessionPlayer() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [plan, setPlan] = useState<SessionPlan | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [episodeState, setEpisodeState] = useState<EpisodeState>({
+    status: "loading",
+    episode: null,
+    spec: null,
+    fallback: false,
+  });
   const [taskIndex, setTaskIndex] = useState(0);
   const [milestones, setMilestones] = useState<MilestoneEvent[]>([]);
   const [showMilestones, setShowMilestones] = useState(false);
@@ -75,6 +87,9 @@ export function SessionPlayer() {
   const wordsTouched = useRef(new Set<string>());
   const started = useRef(false);
 
+  // The whole session's content is ONE generation, requested the
+  // moment the plan lands — it resolves while the learner reads the
+  // briefing, so no task ever waits on a spinner.
   useEffect(() => {
     if (started.current) return;
     started.current = true;
@@ -84,7 +99,7 @@ export function SessionPlayer() {
       body: JSON.stringify({ mode: mode === "full" ? undefined : mode }),
     })
       .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then((data) => {
+      .then((data: { needsPlacement?: boolean; plan: SessionPlan; sessionId: string }) => {
         if (data.needsPlacement) {
           router.replace("/willkommen");
           return;
@@ -92,14 +107,31 @@ export function SessionPlayer() {
         setPlan(data.plan);
         setSessionId(data.sessionId);
         setPhase("briefing");
-        prefetchTasks(data.plan.tasks, 0);
+        const spec = data.plan.episodeSpec;
+        if (!spec) {
+          setEpisodeState({ status: "ready", episode: null, spec: null, fallback: false });
+          return;
+        }
+        fetch("/api/episode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(spec),
+        })
+          .then((response) => (response.ok ? response.json() : Promise.reject()))
+          .then((result: { episode: Episode; fallback?: boolean }) => {
+            setEpisodeState({
+              status: "ready",
+              episode: result.episode,
+              spec,
+              fallback: Boolean(result.fallback),
+            });
+          })
+          .catch(() => {
+            setEpisodeState({ status: "failed", episode: null, spec, fallback: false });
+          });
       })
       .catch(() => setPhase("error"));
   }, [mode, router]);
-
-  useEffect(() => {
-    if (plan && taskIndex > 0) prefetchTasks(plan.tasks, taskIndex + 1);
-  }, [plan, taskIndex]);
 
   const submit = useCallback(async (outcome: ReviewOutcome) => {
     for (const id of Object.keys(outcome.lexemeGrades)) wordsTouched.current.add(id);
@@ -166,6 +198,8 @@ export function SessionPlayer() {
   }
 
   if (phase === "briefing") {
+    const episodePending = plan.episodeSpec !== null && episodeState.status === "loading";
+    const scene = episodeState.episode;
     return (
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-5 py-10 stagger-children">
         <div className="flex flex-col gap-2">
@@ -179,6 +213,30 @@ export function SessionPlayer() {
             )}
           </h1>
         </div>
+        {plan.episodeSpec !== null && (
+          <div className="flex flex-col gap-1.5 rounded-xl border border-line bg-background/60 px-4 py-3.5">
+            <p className="font-display text-xs font-semibold uppercase tracking-[0.14em] text-accent">
+              {t.player.sceneEyebrow}
+            </p>
+            {scene ? (
+              <div className="flex flex-col gap-1 animate-fade-up">
+                <p className="font-display text-lg font-bold tracking-tight">
+                  {scene.title}
+                  <span className="ml-2 text-sm font-medium text-muted">{scene.titleEn}</span>
+                </p>
+                <p className="text-sm text-muted">{scene.settingEn}</p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <span
+                  aria-hidden
+                  className="size-4 animate-spin rounded-full border-2 border-line border-t-accent-bright"
+                />
+                <p className="text-sm text-muted">{t.player.scenePreparing}</p>
+              </div>
+            )}
+          </div>
+        )}
         {plan.briefing.length > 0 && (
           <ul className="flex flex-col gap-2">
             {plan.briefing.map((line) => (
@@ -190,8 +248,12 @@ export function SessionPlayer() {
           </ul>
         )}
         <div className="flex flex-col gap-2">
-          <Button className="py-3.5 text-base" onClick={() => setPhase("task")}>
-            {t.common.go}
+          <Button
+            className="py-3.5 text-base"
+            disabled={episodePending}
+            onClick={() => setPhase("task")}
+          >
+            {episodePending ? t.common.oneMoment : t.common.go}
           </Button>
           <Link href="/" className="text-center text-sm text-muted hover:underline">
             {t.player.notNow}
@@ -202,6 +264,7 @@ export function SessionPlayer() {
   }
 
   if (phase === "done") {
+    const recap = episodeState.episode?.recapEn;
     return (
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-5 py-10 text-center stagger-children">
         <div className="flex flex-col gap-2">
@@ -211,6 +274,7 @@ export function SessionPlayer() {
           <h1 className="font-display text-3xl font-bold tracking-tight">
             {t.player.doneTitle}
           </h1>
+          {recap && <p className="text-[15px]">{recap}</p>}
           <p className="text-[15px] text-muted">
             {wordCount > 0 ? t.player.donePracticed(wordCount) : t.player.doneStreakSafe}
           </p>
@@ -256,9 +320,11 @@ export function SessionPlayer() {
           {taskIndex + 1}/{plan.tasks.length}
         </span>
       </header>
-      <div key={taskIndex} className="flex flex-1 flex-col gap-4 animate-fade-up">
-        <TaskView task={task} submit={submit} finish={finish} skip={finish} sparkle={fire} />
-      </div>
+      <EpisodeProvider value={episodeState}>
+        <div key={taskIndex} className="flex flex-1 flex-col gap-4 animate-fade-up">
+          <TaskView task={task} submit={submit} finish={finish} skip={finish} sparkle={fire} />
+        </div>
+      </EpisodeProvider>
     </main>
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { GenerationSpec, ReviewOutcome, TaskSpec } from "@/lib/engine";
+import { createContext, useContext, useState } from "react";
+import type { Episode, EpisodeSpec, ReviewOutcome, TaskSpec } from "@/lib/engine";
 import { buildIndex, SEED_LEXICON } from "@/lib/engine";
+import { playTap } from "@/lib/audio/sound";
 import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 
@@ -37,85 +38,142 @@ export function gradesFor(
   return Object.fromEntries(lexemeIds.map((id) => [id, grade]));
 }
 
-type Generated<T> =
-  | { status: "loading"; content: null }
-  | { status: "ready"; content: T }
-  | { status: "failed"; content: null };
+/* ---------- The episode: one scene shared by every task ---------- */
 
-type CacheEntry = { promise: Promise<unknown>; resolved: boolean; content: unknown | null };
-const generationCache = new Map<string, CacheEntry>();
-
-function cacheKey(spec: GenerationSpec): string {
-  return JSON.stringify(spec);
+export interface EpisodeState {
+  status: "loading" | "ready" | "failed";
+  episode: Episode | null;
+  /** The spec the episode was generated from (conversation needs it). */
+  spec: EpisodeSpec | null;
+  /** True when a curated fallback scene is being served. */
+  fallback: boolean;
 }
 
-function fetchGeneration(spec: GenerationSpec): CacheEntry {
-  const key = cacheKey(spec);
-  const existing = generationCache.get(key);
-  if (existing) return existing;
+const EpisodeContext = createContext<EpisodeState>({
+  status: "failed",
+  episode: null,
+  spec: null,
+  fallback: false,
+});
 
-  const entry: CacheEntry = { promise: null!, resolved: false, content: null };
-  entry.promise = fetch("/api/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(spec),
-  })
-    .then((r) => (r.ok ? r.json() : Promise.reject()))
-    .then((data) => {
-      entry.resolved = true;
-      entry.content = data.content;
-      return data.content;
-    })
-    .catch(() => {
-      entry.resolved = true;
-      entry.content = null;
-      return null;
-    });
-  generationCache.set(key, entry);
-  return entry;
+export const EpisodeProvider = EpisodeContext.Provider;
+
+export function useEpisode(): EpisodeState {
+  return useContext(EpisodeContext);
 }
 
-export function prefetchTasks(tasks: TaskSpec[], fromIndex: number) {
-  const LOOKAHEAD = 2;
-  for (let i = fromIndex; i < Math.min(fromIndex + LOOKAHEAD, tasks.length); i++) {
-    const spec = tasks[i].generation;
-    if (spec) fetchGeneration(spec);
-  }
+/* ---------- Tap-to-gloss: every word is a reference ---------- */
+
+/** Word→meaning map from the episode's glosses (exact surface forms). */
+export function glossMapOf(episode: Episode | null): Map<string, string> {
+  if (!episode) return new Map();
+  return new Map(episode.glosses.map((gloss) => [gloss.de.toLowerCase(), gloss.en]));
 }
 
-export function useGenerated<T>(task: TaskSpec): Generated<T> {
-  const [state, setState] = useState<Generated<T>>(() => {
-    if (!task.generation) return { status: "failed", content: null };
-    const entry = generationCache.get(cacheKey(task.generation));
-    if (entry?.resolved && entry.content) return { status: "ready", content: entry.content as T };
-    return { status: "loading", content: null };
-  });
-  useEffect(() => {
-    if (!task.generation) return;
-    let cancelled = false;
-    const entry = fetchGeneration(task.generation);
-    if (entry.resolved) {
-      setState(
-        entry.content
-          ? { status: "ready", content: entry.content as T }
-          : { status: "failed", content: null },
-      );
-      return;
-    }
-    entry.promise.then(() => {
-      if (cancelled) return;
-      setState(
-        entry.content
-          ? { status: "ready", content: entry.content as T }
-          : { status: "failed", content: null },
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [task]);
-  return state;
+function cleanToken(token: string): string {
+  return token.replace(/[^\p{L}'’-]/gu, "").toLowerCase();
 }
+
+/** Resolve one surface token to a gloss: episode glosses first, then the lexicon. */
+function glossFor(clean: string, glosses?: Map<string, string>): string | null {
+  const fromEpisode = glosses?.get(clean);
+  if (fromEpisode) return fromEpisode;
+  const ids = INDEX.byForm.get(clean);
+  if (!ids || ids.length === 0) return null;
+  const lexeme = INDEX.byId.get(ids[0]);
+  if (!lexeme) return null;
+  return lexeme.gender ? `${lexeme.gender} ${lexeme.lemma} — ${lexeme.english}` : lexeme.english;
+}
+
+/**
+ * German text where EVERY resolvable word is tappable for its meaning
+ * (the LingQ takeaway: always a reference within reach). Tapping is
+ * also a signal — callers learn which words needed help.
+ */
+export function GlossText({
+  text,
+  glosses,
+  onTapWord,
+  className,
+}: {
+  text: string;
+  glosses?: Map<string, string>;
+  onTapWord?: (token: string) => void;
+  className?: string;
+}) {
+  const [revealed, setRevealed] = useState<number | null>(null);
+  return (
+    <span className={className}>
+      {text.split(/(\s+)/).map((token, i) => {
+        const clean = cleanToken(token);
+        const gloss = clean ? glossFor(clean, glosses) : null;
+        if (!gloss) return <span key={i}>{token}</span>;
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => {
+              playTap();
+              setRevealed(revealed === i ? null : i);
+              onTapWord?.(clean);
+            }}
+            className="relative inline decoration-accent-bright/40 decoration-dotted underline-offset-4 hover:underline focus-visible:underline"
+          >
+            {token}
+            {revealed === i && (
+              <span className="absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background shadow">
+                {gloss}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </span>
+  );
+}
+
+/**
+ * A German line with its translation one tap away — no German is ever
+ * a black box, especially lines the learner is asked to speak.
+ */
+export function LineWithMeaning({
+  de,
+  en,
+  glosses,
+  open,
+  onTapWord,
+  className,
+}: {
+  de: string;
+  en: string;
+  glosses?: Map<string, string>;
+  /** Force the translation visible (speaking tasks show it always). */
+  open?: boolean;
+  onTapWord?: (token: string) => void;
+  className?: string;
+}) {
+  const [shown, setShown] = useState(false);
+  const visible = open || shown;
+  return (
+    <span className={`inline-flex flex-col gap-0.5 ${className ?? ""}`}>
+      <GlossText text={de} glosses={glosses} onTapWord={onTapWord} />
+      {visible ? (
+        <span className="text-sm text-muted">{en}</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShown(true)}
+          className="self-start text-xs font-medium text-accent-bright/80 hover:underline"
+          aria-label="EN"
+        >
+          EN
+        </button>
+      )}
+    </span>
+  );
+}
+
+/* ---------- Shared chrome ---------- */
 
 export function GeneratingCard() {
   const t = useStrings();
@@ -145,12 +203,20 @@ export function FailedCard({ skip }: { skip: () => void }) {
 export function TaskHeading({
   title,
   note,
+  intro,
 }: {
   title: string;
   note?: string;
+  /** One line on why this step exists / how it ties into the scene. */
+  intro?: string;
 }) {
   return (
     <div className="flex flex-col gap-0.5">
+      {intro && (
+        <p className="font-display text-xs font-semibold uppercase tracking-[0.14em] text-accent">
+          {intro}
+        </p>
+      )}
       <h2 className="font-display text-2xl font-bold tracking-tight">{title}</h2>
       {note && <p className="text-sm text-muted">{note}</p>}
     </div>

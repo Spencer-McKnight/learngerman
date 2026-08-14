@@ -2,11 +2,20 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { Gender, Lexeme } from "@/lib/engine";
+import { sceneLineFor } from "@/lib/engine";
 import { playCorrect, playWrong } from "@/lib/audio/sound";
 import { GenderedNoun } from "@/components/gender";
 import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
-import { baseOutcome, INDEX, TaskHeading, type TaskProps } from "./shared";
+import {
+  baseOutcome,
+  glossMapOf,
+  GlossText,
+  INDEX,
+  TaskHeading,
+  useEpisode,
+  type TaskProps,
+} from "./shared";
 
 const GENDERS: Gender[] = ["der", "die", "das"];
 
@@ -29,6 +38,8 @@ function distractorsFor(lexeme: Lexeme): string[] {
 
 export function RetrievalTask({ task, submit, finish, sparkle }: TaskProps) {
   const t = useStrings();
+  const { episode } = useEpisode();
+  const glosses = useMemo(() => glossMapOf(episode), [episode]);
   const lexemes = useMemo(
     () =>
       (task.lexemeIds ?? [])
@@ -118,6 +129,7 @@ export function RetrievalTask({ task, submit, finish, sparkle }: TaskProps) {
   return (
     <>
       <TaskHeading
+        intro={t.tasks.intro.retrieval}
         title={t.tasks.retrieval.title}
         note={t.tasks.retrieval.note(index + 1, lexemes.length)}
       />
@@ -188,6 +200,17 @@ export function RetrievalTask({ task, submit, finish, sparkle }: TaskProps) {
 
       {phase === "feedback" && (
         <div className="mt-auto flex flex-col gap-2 animate-fade-up">
+          {(() => {
+            const context = episode ? sceneLineFor(episode, lexeme.id, INDEX) : null;
+            return (
+              context && (
+                <div className="rounded-lg border border-line bg-background/60 px-3 py-2 text-sm">
+                  <span className="mr-1 font-medium text-muted">{t.tasks.fromScene}</span>
+                  <GlossText text={context.de} glosses={glosses} />
+                </div>
+              )
+            );
+          })()}
           {!(meaningCorrect && genderCorrect) && (
             <p className="text-center text-sm text-muted">
               {t.tasks.retrieval.comesBack}

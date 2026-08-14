@@ -140,9 +140,7 @@ export function useSparkle() {
     sparksRef.current = [...sparksRef.current, ...newSparks];
 
     cancelAnimationFrame(rafRef.current);
-    let frame = 0;
     const draw = () => {
-      frame++;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const alive: Spark[] = [];
       for (const s of sparksRef.current) {

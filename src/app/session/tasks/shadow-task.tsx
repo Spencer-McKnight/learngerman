@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * Shadowing: listen, then say it back. Scored honestly at the word
+ * Shadowing: listen, then say back lines from the dialogue just read.
+ * The English meaning sits under every line — nobody is asked to
+ * speak a sentence they can't place. Scored honestly at the word
  * level from the STT transcript; where recognition doesn't exist the
  * fallback is clearly-labelled self-assessment — never a fake score.
  */
 
 import { useMemo, useState } from "react";
-import type { GeneratedStory } from "@/lib/engine";
 import { scoreSpeech } from "@/lib/engine";
 import { speakGerman, ttsAvailable } from "@/lib/audio/tts";
 import { recognizeGerman, sttAvailable } from "@/lib/audio/stt";
@@ -18,14 +19,16 @@ import {
   baseOutcome,
   FailedCard,
   GeneratingCard,
+  glossMapOf,
+  GlossText,
   TaskHeading,
-  useGenerated,
+  useEpisode,
   type TaskProps,
 } from "./shared";
 
 export function ShadowTask({ task, submit, finish, skip }: TaskProps) {
   const t = useStrings();
-  const generated = useGenerated<GeneratedStory>(task);
+  const { status, episode } = useEpisode();
   const canListen = useMemo(() => ttsAvailable(), []);
   const canSpeak = useMemo(() => sttAvailable(), []);
   const [index, setIndex] = useState(0);
@@ -35,11 +38,15 @@ export function ShadowTask({ task, submit, finish, skip }: TaskProps) {
   const [grades, setGrades] = useState<(1 | 2 | 3 | 4)[]>([]);
   const [busy, setBusy] = useState(false);
 
-  if (generated.status === "loading") return <GeneratingCard />;
-  if (generated.status === "failed" || !generated.content) return <FailedCard skip={skip} />;
+  const glosses = useMemo(() => glossMapOf(episode), [episode]);
 
-  const sentences = generated.content.sentences;
-  const sentence = sentences[index];
+  if (status === "loading") return <GeneratingCard />;
+  if (status === "failed" || !episode || episode.shadow.length === 0) {
+    return <FailedCard skip={skip} />;
+  }
+
+  const lines = episode.shadow;
+  const line = lines[index];
 
   const record = async () => {
     setListening(true);
@@ -47,7 +54,7 @@ export function ShadowTask({ task, submit, finish, skip }: TaskProps) {
     const recognizer = recognizeGerman(setTranscript);
     const heard = await recognizer.result;
     setListening(false);
-    const result = scoreSpeech(heard, sentence);
+    const result = scoreSpeech(heard, line.de);
     setScore(result);
     if (result.verdict === "retry") playWrong();
     else playCorrect();
@@ -55,7 +62,7 @@ export function ShadowTask({ task, submit, finish, skip }: TaskProps) {
 
   const advance = async (grade: 1 | 2 | 3 | 4) => {
     const collected = [...grades, grade];
-    if (index + 1 < sentences.length) {
+    if (index + 1 < lines.length) {
       setGrades(collected);
       setIndex(index + 1);
       setScore(null);
@@ -64,7 +71,7 @@ export function ShadowTask({ task, submit, finish, skip }: TaskProps) {
       setBusy(true);
       const mean = collected.reduce((sum, value) => sum + value, 0) / collected.length;
       const rounded = Math.round(mean) as 1 | 2 | 3 | 4;
-      const targets = task.generation?.targetLemmas ?? [];
+      const targets = task.lexemeIds ?? [];
       await submit({
         ...baseOutcome(
           task,
@@ -83,14 +90,20 @@ export function ShadowTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
+        intro={t.tasks.intro.shadow}
         title={t.tasks.shadow.title}
-        note={t.tasks.shadow.note(index + 1, sentences.length)}
+        note={t.tasks.shadow.note(index + 1, lines.length)}
       />
       <Card className="flex flex-col items-center gap-5 py-8">
-        <p className="text-center text-[19px] font-medium leading-relaxed">{sentence}</p>
+        <div className="flex flex-col items-center gap-1 text-center">
+          <p className="text-[19px] font-medium leading-relaxed">
+            <GlossText text={line.de} glosses={glosses} />
+          </p>
+          <p className="text-sm text-muted">{line.en}</p>
+        </div>
         <div className="flex gap-2">
           {canListen && (
-            <Button variant="outline" onClick={() => void speakGerman(sentence)}>
+            <Button variant="outline" onClick={() => void speakGerman(line.de)}>
               {t.common.listen}
             </Button>
           )}

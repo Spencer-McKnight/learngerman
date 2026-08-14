@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * Scripted dialogue: the learner speaks fixed turns of a two-person
- * dialogue — training wheels between construction and free speech.
+ * Scripted dialogue: the learner speaks their own "Du" turns of the
+ * scene's dialogue — training wheels between construction and free
+ * speech. The meaning of every line is visible before it's spoken;
+ * nobody performs a sentence they can't place.
  */
 
 import { useMemo, useState } from "react";
-import type { GeneratedDialogue } from "@/lib/engine";
 import { scoreSpeech } from "@/lib/engine";
 import { speakGerman, ttsAvailable } from "@/lib/audio/tts";
 import { recognizeGerman, sttAvailable } from "@/lib/audio/stt";
@@ -17,14 +18,16 @@ import {
   baseOutcome,
   FailedCard,
   GeneratingCard,
+  glossMapOf,
+  GlossText,
   TaskHeading,
-  useGenerated,
+  useEpisode,
   type TaskProps,
 } from "./shared";
 
 export function ScriptedTask({ task, submit, finish, skip }: TaskProps) {
   const t = useStrings();
-  const generated = useGenerated<GeneratedDialogue>(task);
+  const { status, episode } = useEpisode();
   const canListen = useMemo(() => ttsAvailable(), []);
   const canSpeak = useMemo(() => sttAvailable(), []);
   const [index, setIndex] = useState(0);
@@ -33,13 +36,20 @@ export function ScriptedTask({ task, submit, finish, skip }: TaskProps) {
   const [grades, setGrades] = useState<(1 | 2 | 3 | 4)[]>([]);
   const [busy, setBusy] = useState(false);
 
-  if (generated.status === "loading") return <GeneratingCard />;
-  if (generated.status === "failed" || !generated.content) return <FailedCard skip={skip} />;
+  const glosses = useMemo(() => glossMapOf(episode), [episode]);
 
-  const turns = generated.content.turns;
-  const partner = turns[0]?.speaker;
+  if (status === "loading") return <GeneratingCard />;
+  if (status === "failed" || !episode || episode.dialogue.length === 0) {
+    return <FailedCard skip={skip} />;
+  }
+
+  const turns = episode.dialogue;
+  const hasDu = turns.some((turn) => turn.speaker === "Du");
+  const partner = hasDu ? null : turns[0]?.speaker;
+  const isMine = (speaker: string) =>
+    hasDu ? speaker === "Du" : speaker !== partner;
   const turn = turns[index];
-  const mine = turn.speaker !== partner;
+  const mine = isMine(turn.speaker);
 
   const record = async () => {
     setListening(true);
@@ -63,7 +73,7 @@ export function ScriptedTask({ task, submit, finish, skip }: TaskProps) {
       setBusy(true);
       const spoken = collected.length > 0 ? collected : [2 as const];
       const mean = spoken.reduce((sum, grade) => sum + grade, 0) / spoken.length;
-      const targets = task.generation?.targetLemmas ?? [];
+      const targets = task.lexemeIds ?? [];
       await submit({
         ...baseOutcome(
           task,
@@ -81,25 +91,33 @@ export function ScriptedTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
-        title={generated.content.title}
+        intro={t.tasks.intro.dialogue}
+        title={episode.title}
         note={
           mine ? t.tasks.scripted.yourLine : t.tasks.scripted.partnerLine(turn.speaker)
         }
       />
       <Card className="flex flex-col gap-3">
         {turns.slice(0, index + 1).map((line, i) => {
-          const isMine = line.speaker !== partner;
+          const lineMine = isMine(line.speaker);
           return (
-            <p
+            <div
               key={i}
-              className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-[15px] leading-relaxed ${
-                isMine
+              className={`flex max-w-[85%] flex-col gap-0.5 rounded-2xl px-3.5 py-2 text-[15px] leading-relaxed ${
+                lineMine
                   ? "self-end rounded-br-md bg-accent text-white"
                   : "self-start rounded-bl-md bg-background"
               }`}
             >
-              {line.de}
-            </p>
+              <span>
+                {lineMine ? line.de : <GlossText text={line.de} glosses={glosses} />}
+              </span>
+              {i === index && (
+                <span className={`text-xs ${lineMine ? "text-white/75" : "text-muted"}`}>
+                  {line.en}
+                </span>
+              )}
+            </div>
           );
         })}
         {verdict && (

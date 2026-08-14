@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateObject } from "ai";
+import { gateway, generateObject } from "ai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -11,9 +11,9 @@ import {
 import type { GenerationSpec } from "@/lib/engine";
 import {
   aiCacheKey,
+  CHAT_MODEL,
   gatewayOptions,
   getCachedResponse,
-  MODEL,
   putCachedResponse,
 } from "@/lib/ai";
 
@@ -25,6 +25,13 @@ const requestSchema = z.object({
   targetLemmas: z.array(z.string()),
   stage: z.number().int().min(1).max(5),
   coverageTarget: z.number().min(0.85).max(0.99),
+  /** The session's scene, so the conversation continues the episode. */
+  scene: z
+    .object({
+      title: z.string(),
+      settingEn: z.string(),
+    })
+    .optional(),
   history: z
     .array(z.object({ role: z.enum(["tutor", "learner"]), text: z.string() }))
     .max(30),
@@ -33,11 +40,13 @@ const requestSchema = z.object({
 const SYSTEM = `You are a friendly German conversation partner for one learner.
 Use ONLY allowed-list words (any inflected form), plus names and numbers.
 1–2 short casual sentences per turn; end with something the learner can answer.
-Warm and curious, never teacherly.`;
+Warm and curious, never teacherly. Always provide replyEn as a natural translation.`;
 
 /**
  * POST → one tutor turn of free conversation, held to the coverage
  * contract like all generated content (one repair attempt, then 502).
+ * The opener normally comes from the episode itself, so this route is
+ * only reached once a real exchange is underway.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -53,7 +62,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.message }, { status: 400 });
   }
-  const { allowedLemmas, targetLemmas, stage, coverageTarget, history } = parsed.data;
+  const { allowedLemmas, targetLemmas, stage, coverageTarget, scene, history } = parsed.data;
 
   const spec: GenerationSpec = {
     kind: "conversation-turn",
@@ -83,6 +92,7 @@ export async function POST(request: Request) {
     .join("\n");
   const basePrompt = [
     `Allowed words: ${allowed}`,
+    scene ? `You are chatting about this scene the learner just lived: "${scene.title}" — ${scene.settingEn}` : null,
     dueWords ? `Weave in when natural: ${dueWords}` : null,
     history.length === 0
       ? "Open with a warm, simple question."
@@ -93,7 +103,7 @@ export async function POST(request: Request) {
 
   // Identical transcript + word lists → identical reply is fine; in
   // practice this mostly dedupes conversation openers.
-  const key = aiCacheKey(MODEL, "conversation-turn", SYSTEM, basePrompt);
+  const key = aiCacheKey(CHAT_MODEL, "conversation-turn", SYSTEM, basePrompt);
   const cached = await getCachedResponse(key);
   if (cached) return NextResponse.json({ reply: cached, attempt: 0, cached: true });
 
@@ -102,7 +112,7 @@ export async function POST(request: Request) {
     let object: z.infer<typeof conversationReplySchema>;
     try {
       ({ object } = await generateObject({
-        model: MODEL,
+        model: gateway(CHAT_MODEL),
         system: SYSTEM,
         prompt,
         schema: conversationReplySchema,
@@ -120,7 +130,7 @@ export async function POST(request: Request) {
     }
     const issues = validateGenerated(object.replyDe, spec, index);
     if (issues.length === 0) {
-      await putCachedResponse(key, "conversation-turn", object);
+      await putCachedResponse(key, CHAT_MODEL, "conversation-turn", object);
       return NextResponse.json({ reply: object, attempt: attempt + 1 });
     }
     console.warn(

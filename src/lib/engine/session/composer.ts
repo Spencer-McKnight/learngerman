@@ -1,17 +1,21 @@
 /**
- * The session composer — turns a LearnerSnapshot into one ~10–15
- * minute session plan ("What a session feels like", methodology):
+ * Session composer — turns a LearnerSnapshot into one session plan
+ * shaped as an episode in three acts, all drawn from ONE generated
+ * scene (episode.ts):
  *
- *   warm story/dialogue carrying today's due words → retrieval taps on
- *   new words → shadowing → grammar bite when developmentally ready →
- *   HVPT ear pairs → speaking task at the learner's current rung.
+ *   Act 1  story sets the scene (carries due + new words)
+ *          → retrieval taps pin down the new words just met
+ *   Act 2  the scene's dialogue → cloze rebuilds its lines
+ *          → grammar bite when developmentally ready
+ *          → shadowing speaks its lines → HVPT ear pairs
+ *   Act 3  the learner continues the scene at their speaking rung
  *
  * Composition rules encode the research directly:
- *  - reviews live INSIDE content (due words become story targets)
- *  - one new difficulty dimension at a time (#10): a session that
- *    introduces a grammar bite halves its new-word budget
- *  - every task lands in the flow channel (~80–90% predicted success)
- *  - nobody is pushed up a speaking rung before the one below is easy
+ * - reviews live INSIDE content (due words become scene targets)
+ * - one new difficulty dimension at a time (#10): a session that
+ *   introduces a grammar bite halves its new-word budget
+ * - every task lands in the flow channel (~80–90% predicted success)
+ * - nobody is pushed up a speaking rung before the one below is easy
  */
 
 import type { LearnerSnapshot, SpeakingRung, SkillId } from "../types";
@@ -22,7 +26,8 @@ import { dueWords, isKnown, newWordBudget } from "../scheduler/scheduler";
 import { itemDifficulty, pSuccess } from "../ability/elo";
 import { nextGrammarBite } from "../grammar/curriculum";
 import { nextContrast } from "../ear/hvpt";
-import type { GenerationSpec, TaskSpec } from "./tasks";
+import type { EpisodeSpec } from "./episode";
+import type { TaskSpec } from "./tasks";
 
 export interface SessionPlan {
   tasks: TaskSpec[];
@@ -31,10 +36,13 @@ export interface SessionPlan {
   dueLexemeIds: string[];
   /** Honest one-liners for the session start screen. */
   briefing: string[];
+  /** The one generation request the whole session draws from. */
+  episodeSpec: EpisodeSpec | null;
 }
 
 const SECONDS = {
-  story: 180,
+  story: 150,
+  dialogue: 150,
   retrievalTapPerWord: 20,
   clozePerItem: 30,
   shadowing: 90,
@@ -46,7 +54,7 @@ const SECONDS = {
   conversation: 240,
 };
 
-/** Topics rotated for the narrative frame: a newcomer's life in Erlangen. */
+/** Scenes rotated through the narrative frame: a newcomer's life in Erlangen. */
 const TOPICS = [
   "morgens in der Bäckerei",
   "an der Bushaltestelle",
@@ -64,7 +72,7 @@ const TOPICS = [
 
 /**
  * Optional session branches ("autonomy on a mostly-linear path",
- * gamification #6): the full daily session is the main path; the other
+ * gamification #6): the full daily session is the main path; other
  * modes are small deliberate detours that reuse the same machinery.
  */
 export type SessionMode = "full" | "review" | "ear" | "speak";
@@ -113,43 +121,54 @@ export function composeSession(
   const newLexemes = nextNewLexemes(knownIds, index, newBudget);
   const newIds = newLexemes.map((lexeme) => lexeme.id);
 
-  // --- 3. Warm-up content: a story or dialogue at the coverage target,
-  // quietly carrying the weakest due words plus today's new words.
-  const storyTargets = [...due.slice(0, 6).map((word) => word.lexemeId), ...newIds];
+  // --- 3. The episode spec: ONE scene carrying the weakest due words
+  // plus today's new words. Everything below draws from it.
+  const sceneTargets = [...due.slice(0, 6).map((word) => word.lexemeId), ...newIds];
+  const overflowDue = due.slice(6, 6 + 4).map((word) => word.lexemeId);
+  const clozeLemmas =
+    overflowDue.length > 0 ? overflowDue : sceneTargets.slice(0, 3);
   const readingRating = snapshot.skills.reading.rating;
-  const asDialogue = seed % 2 === 1;
-  const storyKind = asDialogue ? "dialogue-read" : "story-read";
-  const sentenceCount = Math.max(4, Math.min(12, 4 + Math.round(readingRating * 2)));
-  const allowed = expandAllowed(knownIds, storyTargets, index);
-  const storySpec: GenerationSpec = {
-    kind: storyKind,
-    allowedLemmas: allowed,
-    targetLemmas: storyTargets,
-    newLemmas: newIds,
-    stage: snapshot.syntax.stage,
-    coverageTarget: snapshot.coverageTarget,
-    register: readingRating >= 1.2 ? "colloquial" : "neutral",
-    topic: TOPICS[seed % TOPICS.length],
-    sentenceCount,
-  };
+  const listeningRating = snapshot.skills.listening.rating;
+  const episodeSpec: EpisodeSpec | null =
+    mode === "ear"
+      ? null
+      : {
+          allowedLemmas: expandAllowed(knownIds, [...sceneTargets, ...clozeLemmas], index),
+          targetLemmas: due.slice(0, 6).map((word) => word.lexemeId),
+          newLemmas: newIds,
+          clozeLemmas,
+          stage: snapshot.syntax.stage,
+          coverageTarget: snapshot.coverageTarget,
+          register: readingRating >= 1.2 ? "colloquial" : "neutral",
+          topic: TOPICS[seed % TOPICS.length],
+          storySentences: Math.max(4, Math.min(8, 4 + Math.round(readingRating * 2))),
+          dialogueTurns: Math.max(6, Math.min(10, 6 + Math.round(readingRating * 2))),
+          constructCount: 3,
+          ...(bite ? { grammarFocus: bite.drillFocus } : {}),
+        };
+
+  // --- Act 1: the story sets the scene.
   tasks.push({
-    kind: storyKind,
+    kind: "story-read",
     seconds: SECONDS.story,
     skill: "reading",
     difficulty: itemDifficulty({
-      taskKind: storyKind,
+      taskKind: "story-read",
       newLexemes: newIds.length,
       dueLexemes: Math.min(due.length, 6),
     }),
-    generation: storySpec,
+    section: "story",
+    lexemeIds: sceneTargets,
     note:
       due.length > 0
-        ? `${Math.min(due.length, 6)} Wörter kommen heute zurück`
+        ? english
+          ? `${Math.min(due.length, 6)} words come back today`
+          : `${Math.min(due.length, 6)} Wörter kommen heute zurück`
         : undefined,
   });
 
-  // --- 4. Retrieval taps for the new words (fast form–meaning mapping
-  // before they reappear in context — methodology #5).
+  // --- Retrieval taps pin down the new words just met in the story
+  // (fast form–meaning mapping before they reappear — methodology #5).
   if (newIds.length > 0) {
     tasks.push({
       kind: "retrieval-tap",
@@ -160,52 +179,33 @@ export function composeSession(
     });
   }
 
-  // --- 5. Typed cloze retrieval for the shakiest due words that did
-  // not fit in the story (production beats recognition).
-  const overflowDue = due.slice(6, 6 + 4).map((word) => word.lexemeId);
-  if (overflowDue.length > 0) {
+  // --- Act 2: the scene's dialogue (audio-first once listening can
+  // carry it), then cloze rebuilds its lines from memory.
+  tasks.push({
+    kind: listeningRating >= 1.5 ? "listen-clip" : "dialogue-read",
+    seconds: SECONDS.dialogue,
+    skill: listeningRating >= 1.5 ? "listening" : "reading",
+    difficulty: itemDifficulty({
+      taskKind: "dialogue-read",
+      dueLexemes: Math.min(due.length, 6),
+    }),
+    section: "dialogue",
+    lexemeIds: due.slice(0, 6).map((word) => word.lexemeId),
+  });
+
+  if (clozeLemmas.length > 0) {
     tasks.push({
       kind: "cloze-type",
-      seconds: overflowDue.length * SECONDS.clozePerItem,
+      seconds: clozeLemmas.length * SECONDS.clozePerItem,
       skill: "writing",
-      difficulty: itemDifficulty({ taskKind: "cloze-type", dueLexemes: overflowDue.length }),
-      generation: {
-        kind: "cloze-type",
-        allowedLemmas: expandAllowed(knownIds, overflowDue, index),
-        targetLemmas: overflowDue,
-        newLemmas: [],
-        stage: snapshot.syntax.stage,
-        coverageTarget: snapshot.coverageTarget,
-        register: "neutral",
-      },
-      lexemeIds: overflowDue,
+      difficulty: itemDifficulty({ taskKind: "cloze-type", dueLexemes: clozeLemmas.length }),
+      section: "cloze",
+      lexemeIds: clozeLemmas,
     });
   }
 
-  // --- 6. Shadowing: 60–90s of audio at the listening ability's speed
-  // (native street speed once listening rating clears ~2).
-  const listeningRating = snapshot.skills.listening.rating;
-  tasks.push({
-    kind: "shadowing",
-    seconds: SECONDS.shadowing,
-    skill: "speaking",
-    difficulty: itemDifficulty({
-      taskKind: "shadowing",
-      nativeSpeed: listeningRating >= 2,
-    }),
-    generation: {
-      kind: "shadowing",
-      allowedLemmas: expandAllowed(knownIds, due.slice(0, 2).map((word) => word.lexemeId), index),
-      targetLemmas: due.slice(0, 2).map((word) => word.lexemeId),
-      newLemmas: [],
-      stage: snapshot.syntax.stage,
-      coverageTarget: Math.min(0.98, snapshot.coverageTarget + 0.02),
-      register: listeningRating >= 1.5 ? "colloquial" : "neutral",
-      sentenceCount: 3,
-    },
-  });
-
-  // --- 7. The grammar bite, when one is developmentally ready.
+  // --- The grammar bite, when one is developmentally ready — the
+  // scene was asked to exemplify its focus, so it lands in context.
   if (bite) {
     tasks.push({
       kind: "grammar-bite",
@@ -218,7 +218,20 @@ export function composeSession(
     briefing.push(english ? `New today: ${bite.title}` : `Neu heute: ${bite.titleDe}`);
   }
 
-  // --- 8. HVPT ear pairs when a contrast needs work.
+  // --- Shadowing speaks lines straight from the dialogue just read.
+  tasks.push({
+    kind: "shadowing",
+    seconds: SECONDS.shadowing,
+    skill: "speaking",
+    difficulty: itemDifficulty({
+      taskKind: "shadowing",
+      nativeSpeed: listeningRating >= 2,
+    }),
+    section: "shadow",
+    lexemeIds: due.slice(0, 2).map((word) => word.lexemeId),
+  });
+
+  // --- HVPT ear pairs when a contrast needs work.
   const contrast = nextContrast(snapshot.ear);
   if (contrast) {
     const pairCount = mode === "ear" ? 18 : 6;
@@ -232,15 +245,15 @@ export function composeSession(
     });
   }
 
-  // --- 9. Speaking task at the current rung (shadowing already served
-  // above; higher rungs add their own task).
-  const speakingTask = speakingTaskForRung(snapshot, knownIds, due.slice(0, 3).map((w) => w.lexemeId), index);
+  // --- Act 3: the learner continues the scene at their speaking rung
+  // (shadowing already served above; higher rungs add their own task).
+  const speakingTask = speakingTaskForRung(snapshot, due.slice(0, 3).map((w) => w.lexemeId));
   if (speakingTask) tasks.push(speakingTask);
 
-  // --- 10. Flow-channel check: production extras predicted too hard
-  // are dropped (input, taps, bites and ear pairs stay — their
-  // difficulty is already controlled at the source), then trim to the
-  // time budget (core content first, extras last).
+  // --- Flow-channel check: production extras predicted too hard are
+  // dropped (input, taps, bites and ear pairs stay — their difficulty
+  // is already controlled at the source), then trim to the time
+  // budget. The acts come first, so trimming eats extras, not story.
   const PRODUCTION_KINDS = new Set([
     "cloze-type",
     "construct-sentence",
@@ -258,7 +271,7 @@ export function composeSession(
   const trimmed: TaskSpec[] = [];
   let total = 0;
   for (const task of kept) {
-    if (total + task.seconds > budgetSeconds && trimmed.length >= 3) break;
+    if (total + task.seconds > budgetSeconds * 1.1 && trimmed.length >= 4) break;
     trimmed.push(task);
     total += task.seconds;
   }
@@ -297,10 +310,18 @@ export function composeSession(
     newLexemeIds: newIds,
     dueLexemeIds: due.map((word) => word.lexemeId),
     briefing,
+    episodeSpec: trimmed.some((task) => task.section) ? episodeSpec : null,
   };
 }
 
-const MIN_ALLOWED = 30;
+/**
+ * The model needs room to write natural German: beyond the learner's
+ * known set, top-frequency lemmas (function words above all) join the
+ * allowed list. Slightly bolder than the old floor of 30 — with every
+ * word tappable for its gloss, a rare stretch word is a tap away, not
+ * a wall.
+ */
+const MIN_ALLOWED = 80;
 
 function expandAllowed(
   knownIds: ReadonlySet<string>,
@@ -319,19 +340,9 @@ function expandAllowed(
 
 function speakingTaskForRung(
   snapshot: LearnerSnapshot,
-  knownIds: Set<string>,
   dueIds: string[],
-  index: LexiconIndex,
 ): TaskSpec | null {
   const rung = snapshot.speakingRung;
-  const base: Omit<GenerationSpec, "kind"> = {
-    allowedLemmas: expandAllowed(knownIds, dueIds, index),
-    targetLemmas: dueIds,
-    newLemmas: [],
-    stage: snapshot.syntax.stage,
-    coverageTarget: snapshot.coverageTarget,
-    register: "neutral",
-  };
   switch (rung) {
     case "shadowing":
       return null; // already in every session
@@ -346,7 +357,8 @@ function speakingTaskForRung(
           stageRequired: snapshot.syntax.stage,
           learnerStage: snapshot.syntax.stage,
         }),
-        generation: { ...base, kind: "construct-sentence", sentenceCount: 4 },
+        section: "construct",
+        lexemeIds: dueIds,
       };
     case "scripted":
       return {
@@ -354,7 +366,8 @@ function speakingTaskForRung(
         seconds: SECONDS.scripted,
         skill: "speaking",
         difficulty: itemDifficulty({ taskKind: "scripted-dialogue" }),
-        generation: { ...base, kind: "scripted-dialogue", register: "colloquial", sentenceCount: 8 },
+        section: "dialogue",
+        lexemeIds: dueIds,
       };
     case "timed-recall":
       return {
@@ -362,7 +375,8 @@ function speakingTaskForRung(
         seconds: SECONDS.timedRecall,
         skill: "speaking",
         difficulty: itemDifficulty({ taskKind: "timed-recall", timed: true, freeProduction: true }),
-        generation: { ...base, kind: "timed-recall", sentenceCount: 5 },
+        section: "construct",
+        lexemeIds: dueIds,
       };
     case "free-conversation":
       return {
@@ -370,7 +384,8 @@ function speakingTaskForRung(
         seconds: SECONDS.conversation,
         skill: "speaking",
         difficulty: itemDifficulty({ taskKind: "conversation-turn", freeProduction: true }),
-        generation: { ...base, kind: "conversation-turn", register: "colloquial" },
+        section: "conversation",
+        lexemeIds: dueIds,
       };
   }
 }

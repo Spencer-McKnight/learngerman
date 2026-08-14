@@ -1,83 +1,96 @@
 "use client";
 
 /**
- * Free conversation — the top speaking rung. The tutor stays inside
- * known vocabulary, weaves due words in, and gives at most one gentle
- * correction per turn, rendered as information, never as a red mark.
+ * Free conversation — the top speaking rung, and the episode's final
+ * act: the tutor opens by asking about the scene the learner just
+ * lived. The opener ships inside the episode (zero wait); the tutor
+ * stays inside known vocabulary, weaves due words in, and gives at
+ * most one gentle correction per turn, rendered as information.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ConversationReply } from "@/lib/engine";
 import { speakGerman, ttsAvailable } from "@/lib/audio/tts";
 import { recognizeGerman, sttAvailable } from "@/lib/audio/stt";
 import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
-import { baseOutcome, FailedCard, TaskHeading, type TaskProps } from "./shared";
+import {
+  baseOutcome,
+  FailedCard,
+  glossMapOf,
+  GlossText,
+  LineWithMeaning,
+  TaskHeading,
+  useEpisode,
+  type TaskProps,
+} from "./shared";
 
 interface Message {
   role: "tutor" | "learner";
   text: string;
+  en?: string;
   correction?: ConversationReply["correction"];
 }
 
 export function ConversationTask({ task, submit, finish, skip }: TaskProps) {
   const t = useStrings();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { episode, spec } = useEpisode();
+  const [messages, setMessages] = useState<Message[]>(() =>
+    episode
+      ? [{ role: "tutor", text: episode.opener.de, en: episode.opener.en }]
+      : [],
+  );
   const [draft, setDraft] = useState("");
   const [waiting, setWaiting] = useState(false);
   const [failed, setFailed] = useState(false);
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const wovenWords = useRef(new Set<string>());
-  const started = useRef(false);
+  const spoken = useRef(false);
 
-  const requestReply = useCallback(
-    async (history: Message[]) => {
-      const generation = task.generation;
-      if (!generation) return null;
-      setWaiting(true);
-      try {
-        const response = await fetch("/api/converse", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            allowedLemmas: generation.allowedLemmas,
-            targetLemmas: generation.targetLemmas,
-            stage: generation.stage,
-            coverageTarget: generation.coverageTarget,
-            history: history.map((message) => ({
-              role: message.role,
-              text: message.text,
-            })),
-          }),
-        });
-        if (!response.ok) throw new Error();
-        const data = (await response.json()) as { reply: ConversationReply };
-        for (const id of data.reply.newWordsUsed) wovenWords.current.add(id);
-        return data.reply;
-      } catch {
-        return null;
-      } finally {
-        setWaiting(false);
-      }
-    },
-    [task],
-  );
+  const glosses = useMemo(() => glossMapOf(episode), [episode]);
 
+  // Speak the opener once — it arrived with the episode, so the
+  // conversation starts instantly.
   useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    void requestReply([]).then((reply) => {
-      if (!reply) {
-        setFailed(true);
-        return;
-      }
-      setMessages([{ role: "tutor", text: reply.replyDe }]);
-      if (ttsAvailable()) void speakGerman(reply.replyDe);
-    });
-  }, [requestReply]);
+    if (spoken.current || !episode) return;
+    spoken.current = true;
+    if (ttsAvailable()) void speakGerman(episode.opener.de);
+  }, [episode]);
 
   const learnerTurns = messages.filter((message) => message.role === "learner").length;
+
+  const requestReply = async (history: Message[]) => {
+    if (!spec) return null;
+    setWaiting(true);
+    try {
+      const response = await fetch("/api/converse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          allowedLemmas: spec.allowedLemmas,
+          targetLemmas: spec.targetLemmas,
+          stage: spec.stage,
+          coverageTarget: spec.coverageTarget,
+          ...(episode
+            ? { scene: { title: episode.title, settingEn: episode.settingEn } }
+            : {}),
+          history: history.map((message) => ({
+            role: message.role,
+            text: message.text,
+          })),
+        }),
+      });
+      if (!response.ok) throw new Error();
+      const data = (await response.json()) as { reply: ConversationReply };
+      for (const id of data.reply.newWordsUsed) wovenWords.current.add(id);
+      return data.reply;
+    } catch {
+      return null;
+    } finally {
+      setWaiting(false);
+    }
+  };
 
   const send = async () => {
     const text = draft.trim();
@@ -93,7 +106,7 @@ export function ConversationTask({ task, submit, finish, skip }: TaskProps) {
     setMessages([
       ...withLearner.slice(0, -1),
       { ...withLearner[withLearner.length - 1], correction: reply.correction },
-      { role: "tutor", text: reply.replyDe },
+      { role: "tutor", text: reply.replyDe, en: reply.replyEn },
     ]);
     if (ttsAvailable()) void speakGerman(reply.replyDe);
   };
@@ -120,11 +133,12 @@ export function ConversationTask({ task, submit, finish, skip }: TaskProps) {
     finish();
   };
 
-  if (failed && messages.length === 0) return <FailedCard skip={skip} />;
+  if (!episode && messages.length === 0) return <FailedCard skip={skip} />;
 
   return (
     <>
       <TaskHeading
+        intro={t.tasks.intro.conversation}
         title={t.tasks.conversation.title}
         note={t.tasks.conversation.note}
       />
@@ -136,15 +150,21 @@ export function ConversationTask({ task, submit, finish, skip }: TaskProps) {
               message.role === "learner" ? "items-end" : "items-start"
             }`}
           >
-            <p
+            <div
               className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-[15px] leading-relaxed ${
                 message.role === "learner"
                   ? "rounded-br-md bg-accent text-white"
                   : "rounded-bl-md bg-background"
               }`}
             >
-              {message.text}
-            </p>
+              {message.role === "tutor" && message.en ? (
+                <LineWithMeaning de={message.text} en={message.en} glosses={glosses} />
+              ) : message.role === "tutor" ? (
+                <GlossText text={message.text} glosses={glosses} />
+              ) : (
+                message.text
+              )}
+            </div>
             {message.correction && (
               <p className="max-w-[85%] rounded-lg border border-line px-2.5 py-1.5 text-xs text-muted">
                 💡 {message.correction.corrected}

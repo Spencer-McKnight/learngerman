@@ -71,6 +71,7 @@ export function HvptTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
+        intro={t.tasks.intro.hvpt}
         title={t.tasks.hvpt.title(contrast.label)}
         note={`${contrast.description} · ${t.common.nOfM(index + 1, drill.length)}`}
       />

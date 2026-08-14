@@ -1,95 +1,47 @@
 "use client";
 
 /**
- * Story / dialogue / listen-clip: the comprehensible-input warm-up
- * that quietly carries today's due words. Tapping a glossed word is
- * both help and signal — tapped targets grade lower, untapped higher.
- * The English gist stays behind a tap; German first, always.
+ * Acts 1 and 2 of the episode: the story that sets the scene, then
+ * the dialogue inside it (audio-first as listen-clip once listening
+ * can carry it). Every word is tappable for its meaning; every line's
+ * translation is one tap away. Tapping is both help and signal —
+ * tapped targets grade lower, untapped higher.
  */
 
 import { useMemo, useState } from "react";
-import type { GeneratedDialogue, GeneratedStory } from "@/lib/engine";
 import { speakGerman, stopSpeaking, ttsAvailable } from "@/lib/audio/tts";
-import { playTap } from "@/lib/audio/sound";
 import { useStrings } from "@/components/i18n-provider";
 import { Button, Card } from "@/components/ui";
 import {
   baseOutcome,
   FailedCard,
   GeneratingCard,
+  glossMapOf,
   INDEX,
+  LineWithMeaning,
   TaskHeading,
-  useGenerated,
+  useEpisode,
   type TaskProps,
 } from "./shared";
 
-function cleanToken(token: string): string {
-  return token.replace(/[^\p{L}'’-]/gu, "").toLowerCase();
-}
-
-function TappableLine({
-  text,
-  glosses,
-  onTapGloss,
-}: {
-  text: string;
-  glosses: Map<string, string>;
-  onTapGloss: (token: string) => void;
-}) {
-  const [revealed, setRevealed] = useState<string | null>(null);
-  return (
-    <span>
-      {text.split(/(\s+)/).map((token, i) => {
-        const clean = cleanToken(token);
-        const gloss = clean ? glosses.get(clean) : undefined;
-        if (!gloss) return <span key={i}>{token}</span>;
-        return (
-          <button
-            key={i}
-            type="button"
-            onClick={() => {
-              playTap();
-              setRevealed(revealed === `${i}` ? null : `${i}`);
-              onTapGloss(clean);
-            }}
-            className="relative inline underline decoration-accent-bright/60 decoration-dotted underline-offset-4"
-          >
-            {token}
-            {revealed === `${i}` && (
-              <span className="absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background shadow">
-                {gloss}
-              </span>
-            )}
-          </button>
-        );
-      })}
-    </span>
-  );
-}
-
 export function StoryTask({ task, submit, finish, skip }: TaskProps) {
   const t = useStrings();
-  const generated = useGenerated<GeneratedStory | GeneratedDialogue>(task);
+  const { status, episode } = useEpisode();
   const audioFirst = task.kind === "listen-clip";
   const [textShown, setTextShown] = useState(!audioFirst);
-  const [gistShown, setGistShown] = useState(false);
   const [tapped] = useState(() => new Set<string>());
   const [busy, setBusy] = useState(false);
 
-  const content = generated.content;
-  const lines: { speaker?: string; de: string }[] = useMemo(() => {
-    if (!content) return [];
-    if ("sentences" in content) return content.sentences.map((de) => ({ de }));
-    return content.turns;
-  }, [content]);
+  const lines: { speaker?: string; de: string; en: string }[] = useMemo(() => {
+    if (!episode) return [];
+    return task.section === "dialogue" ? episode.dialogue : episode.story;
+  }, [episode, task.section]);
+  const glosses = useMemo(() => glossMapOf(episode), [episode]);
 
-  if (generated.status === "loading") return <GeneratingCard />;
-  if (generated.status === "failed" || !content) return <FailedCard skip={skip} />;
+  if (status === "loading") return <GeneratingCard />;
+  if (status === "failed" || !episode || lines.length === 0) return <FailedCard skip={skip} />;
 
-  const glosses = new Map(
-    content.glosses.map((gloss) => [gloss.de.toLowerCase(), gloss.en]),
-  );
-  const targets = task.generation?.targetLemmas ?? [];
+  const targets = task.lexemeIds ?? [];
   const fullText = lines.map((line) => line.de).join(" ");
 
   const complete = async (understood: boolean) => {
@@ -115,10 +67,11 @@ export function StoryTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
+        intro={task.section === "dialogue" ? t.tasks.intro.dialogue : t.tasks.intro.story}
         title={
           audioFirst
             ? t.tasks.story.titleListen
-            : task.kind === "dialogue-read"
+            : task.section === "dialogue"
               ? t.tasks.story.titleDialogue
               : t.tasks.story.titleRead
         }
@@ -126,7 +79,12 @@ export function StoryTask({ task, submit, finish, skip }: TaskProps) {
       />
       <Card className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="font-display text-lg font-bold">{content.title}</h3>
+          <h3 className="font-display text-lg font-bold">
+            {episode.title}
+            {task.section === "story" && (
+              <span className="ml-2 text-sm font-medium text-muted">{episode.titleEn}</span>
+            )}
+          </h3>
           {ttsAvailable() && (
             <Button
               variant="outline"
@@ -138,19 +96,22 @@ export function StoryTask({ task, submit, finish, skip }: TaskProps) {
           )}
         </div>
         {textShown ? (
-          <div className="flex flex-col gap-2.5 text-[17px] leading-relaxed">
+          <div className="flex flex-col gap-3 text-[17px] leading-relaxed">
             {lines.map((line, i) => (
-              <p key={i}>
-                {line.speaker && (
-                  <span className="mr-1.5 font-display text-sm font-semibold text-accent-bright">
-                    {line.speaker}:
-                  </span>
-                )}
-                <TappableLine
-                  text={line.de}
-                  glosses={glosses}
-                  onTapGloss={(token) => tapped.add(token)}
-                />
+              <p key={i} className="flex flex-col">
+                <span>
+                  {line.speaker && (
+                    <span className="mr-1.5 font-display text-sm font-semibold text-accent-bright">
+                      {line.speaker}:
+                    </span>
+                  )}
+                  <LineWithMeaning
+                    de={line.de}
+                    en={line.en}
+                    glosses={glosses}
+                    onTapWord={(token) => tapped.add(token)}
+                  />
+                </span>
               </p>
             ))}
           </div>
@@ -158,15 +119,6 @@ export function StoryTask({ task, submit, finish, skip }: TaskProps) {
           <Button variant="outline" onClick={() => setTextShown(true)}>
             {t.tasks.story.showText}
           </Button>
-        )}
-        {textShown && (
-          <button
-            type="button"
-            onClick={() => setGistShown(!gistShown)}
-            className="self-start text-xs font-medium text-accent-bright hover:underline"
-          >
-            {gistShown ? content.englishGist : t.tasks.story.gistQuestion}
-          </button>
         )}
       </Card>
       {textShown && (

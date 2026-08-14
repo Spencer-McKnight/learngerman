@@ -25,6 +25,7 @@ export function GrammarTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
+        intro={t.tasks.intro.grammar}
         title={uiLang === "de" ? bite.titleDe : bite.title}
         note={uiLang === "de" ? bite.title : bite.titleDe}
       />

@@ -138,9 +138,24 @@ describe("session composer", () => {
     );
     const plan = composeSession(freshSnapshot({ words, placed: true }), index);
     const story = plan.tasks[0];
-    expect(story.generation?.targetLemmas).toEqual(
+    expect(story.section).toBe("story");
+    expect(story.lexemeIds).toEqual(
       expect.arrayContaining(["trinken:V", "Kaffee:N", "heute:ADV"]),
     );
+    expect(plan.episodeSpec?.targetLemmas).toEqual(
+      expect.arrayContaining(["trinken:V", "Kaffee:N", "heute:ADV"]),
+    );
+  });
+
+  it("plans one episode that every content task draws from", () => {
+    const plan = composeSession(freshSnapshot(), index);
+    expect(plan.episodeSpec).not.toBeNull();
+    const sections = plan.tasks.filter((task) => task.section).map((task) => task.section);
+    expect(sections).toContain("story");
+    expect(sections).toContain("dialogue");
+    // Ear-only detours carry no generated content at all.
+    const ear = composeSession(freshSnapshot({ placed: true }), index, { mode: "ear" });
+    expect(ear.episodeSpec).toBeNull();
   });
 
   it("speaking rung only advances on sustained success and ability", () => {

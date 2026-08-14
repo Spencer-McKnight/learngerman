@@ -33,5 +33,7 @@ export * from "./placement/placement";
 export * from "./scoring/text";
 export * from "./scoring/speech";
 export * from "./session/tasks";
+export * from "./session/episode";
+export * from "./session/fallback-episodes";
 export * from "./session/composer";
 export * from "./progress/milestones";

@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * Construct-before-reveal (and its timed-recall sibling): say the
- * English sentence in German, then compare. Productions feed the
- * syntax staircase — the engine's detectors read what was actually
- * built. The timer is mild pressure, not a heart to lose.
+ * Construct-before-reveal (and its timed-recall sibling): the learner
+ * continues the scene themselves — each English prompt is the natural
+ * next thing to say in the episode. Productions feed the syntax
+ * staircase; the timer is mild pressure, not a heart to lose.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GeneratedConstruct, StageObservation } from "@/lib/engine";
+import type { StageObservation } from "@/lib/engine";
 import { analyzeProduction, scoreSentence } from "@/lib/engine";
 import { recognizeGerman, sttAvailable } from "@/lib/audio/stt";
 import { playCorrect, playWrong } from "@/lib/audio/sound";
@@ -18,9 +18,11 @@ import {
   baseOutcome,
   FailedCard,
   GeneratingCard,
+  glossMapOf,
+  GlossText,
   INDEX,
   TaskHeading,
-  useGenerated,
+  useEpisode,
   type TaskProps,
 } from "./shared";
 
@@ -33,7 +35,7 @@ interface ItemResult {
 
 export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
   const t = useStrings();
-  const generated = useGenerated<GeneratedConstruct>(task);
+  const { status, episode } = useEpisode();
   const timed = task.kind === "timed-recall";
   const canSpeak = useMemo(() => sttAvailable(), []);
   const [index, setIndex] = useState(0);
@@ -49,14 +51,15 @@ export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
   const answerRef = useRef("");
   const checkedRef = useRef(false);
 
-  const items = generated.content?.items;
+  const items = episode?.construct;
+  const glosses = useMemo(() => glossMapOf(episode ?? null), [episode]);
 
   const check = useCallback(
     (given: string) => {
       if (!items || checkedRef.current) return;
       checkedRef.current = true;
       const item = items[index];
-      const targets = [item.targetDe, ...item.acceptableAlternatives];
+      const targets = [item.targetDe, ...item.alternatives];
       let best = { accuracy: 0, orderCorrect: false };
       for (const target of targets) {
         const score = scoreSentence(given, target);
@@ -89,8 +92,8 @@ export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
     };
   }, [index, timed, items, check]);
 
-  if (generated.status === "loading") return <GeneratingCard />;
-  if (generated.status === "failed" || !items) return <FailedCard skip={skip} />;
+  if (status === "loading") return <GeneratingCard />;
+  if (status === "failed" || !items || items.length === 0) return <FailedCard skip={skip} />;
 
   const item = items[index];
 
@@ -123,7 +126,7 @@ export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
         (top, observation) => Math.max(top, observation.stage),
         0,
       );
-      const targets = task.generation?.targetLemmas ?? [];
+      const targets = task.lexemeIds ?? [];
       const rounded = Math.round(mean) as 1 | 2 | 3 | 4;
       await submit({
         ...baseOutcome(
@@ -150,6 +153,7 @@ export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
   return (
     <>
       <TaskHeading
+        intro={t.tasks.intro.construct}
         title={timed ? t.tasks.construct.titleTimed : t.tasks.construct.titleBuild}
         note={t.tasks.construct.note(index + 1, items.length)}
       />
@@ -196,7 +200,9 @@ export function ConstructTask({ task, submit, finish, skip }: TaskProps) {
           </form>
         ) : (
           <div className="flex flex-col gap-1.5 animate-fade-up">
-            <p className="text-[17px] font-semibold">{item.targetDe}</p>
+            <p className="text-[17px] font-semibold">
+              <GlossText text={item.targetDe} glosses={glosses} />
+            </p>
             <p className="text-sm text-muted">
               {checked.grade >= 3 && t.tasks.construct.exact}
               {checked.grade === 2 &&
