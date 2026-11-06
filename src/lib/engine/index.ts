@@ -36,4 +36,5 @@ export * from "./session/tasks";
 export * from "./session/episode";
 export * from "./session/fallback-episodes";
 export * from "./session/composer";
+export * from "./session/lesson";
 export * from "./progress/milestones";
