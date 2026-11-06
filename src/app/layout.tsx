@@ -23,16 +23,17 @@ const body = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Learn German",
-    template: "%s · Learn German",
+    default: "Linie · Learn German",
+    template: "%s · Linie",
   },
   description:
-    "An adaptive German tutor: comprehensible input at your exact level, honest progress, real spoken German.",
+    "Linie: a story-driven German course through Erlangen — every station a scene from your new life, Jule Hartmann as your teacher, honest progress, real spoken German.",
+  applicationName: "Linie",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Learn German",
+    title: "Linie",
   },
 };
 

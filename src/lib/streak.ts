@@ -56,3 +56,36 @@ export function computeStreak(activeDays: string[], now = new Date()): Streak {
     returning: length === 0 && days.size > 0,
   };
 }
+
+export type DayState = "active" | "frozen" | "missed" | "today";
+
+export interface DayDot {
+  /** ISO day (yyyy-mm-dd). */
+  day: string;
+  state: DayState;
+}
+
+/**
+ * The last `count` calendar days ending today, each with an honest
+ * state for the streak row: `active` (a session was completed),
+ * `frozen` (a single missed day bridged by the free freeze — the day
+ * before and the day after were active), `missed`, or `today` when
+ * today has no session yet (today with a session is `active`).
+ */
+export function recentDays(activeDays: string[], now = new Date(), count = 7): DayDot[] {
+  const days = new Set(activeDays);
+  const today = isoDay(now);
+  const dots: DayDot[] = [];
+  for (let offset = count - 1; offset >= 0; offset--) {
+    const day = shiftDay(today, -offset);
+    const active = days.has(day);
+    const next = shiftDay(day, 1);
+    let state: DayState;
+    if (active) state = "active";
+    else if (day === today) state = "today";
+    else if (days.has(shiftDay(day, -1)) && (days.has(next) || next === today)) state = "frozen";
+    else state = "missed";
+    dots.push({ day, state });
+  }
+  return dots;
+}

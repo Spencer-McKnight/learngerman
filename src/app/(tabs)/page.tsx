@@ -1,64 +1,92 @@
 import Link from "next/link";
+import { Ear, Lock, MessageCircle, Mic, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { computeStreak, isoDay } from "@/lib/streak";
+import { getProgressBundle } from "@/lib/progress";
+import { isoDay, recentDays } from "@/lib/streak";
 import { getUiStrings } from "@/lib/i18n/server";
-import { Button, Card, SectionLabel } from "@/components/ui";
+import { LINES, stationById, type Line } from "@/lib/curriculum";
+import { Button, Card, Eyebrow, SectionLabel, StationSign, type LineNumber } from "@/components/ui";
+import { LineMap, type MapLine } from "@/components/line-map";
+import { Streak } from "@/components/streak";
 import { HomeClient } from "./home-client";
 
 export const dynamic = "force-dynamic";
 
-export default async function Heute() {
+/** Only what the map needs crosses to the client — never a scene. */
+function toMapLine(line: Line): MapLine {
+  return {
+    id: line.id,
+    number: Math.min(5, Math.max(1, line.number)) as LineNumber,
+    name: line.name,
+    nameEn: line.nameEn,
+    colour: line.colour,
+    authored: line.authored,
+    stations: line.stations.map((station) => ({
+      id: station.id,
+      name: station.name,
+      title: station.title,
+      titleEn: station.titleEn,
+      canDoEn: station.canDoEn,
+      minutes: station.minutes,
+      order: station.order,
+    })),
+  };
+}
+
+export default async function Linie() {
   const supabase = await createClient();
-  const nowIso = new Date().toISOString();
-  const [{ data: claims }, profile, sessions, dueCount, { t }] = await Promise.all([
-    supabase.auth.getClaims(),
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (!userId) return null;
+
+  const now = new Date();
+  const weekAgo = new Date(now);
+  weekAgo.setUTCDate(weekAgo.getUTCDate() - 8);
+
+  const [bundle, profile, dueCount, recentSessions, { t, lang }] = await Promise.all([
+    getProgressBundle(supabase, userId),
+    supabase.from("learner_profiles").select("prefs").maybeSingle(),
     supabase
-      .from("learner_profiles")
-      .select("placed, prefs, minutes_per_session")
-      .maybeSingle(),
+      .from("word_states")
+      .select("lexeme_id", { count: "exact", head: true })
+      .lte("due", now.toISOString()),
     supabase
       .from("sessions")
       .select("completed_at")
       .not("completed_at", "is", null)
-      .order("completed_at", { ascending: false })
-      .limit(120),
-    supabase
-      .from("word_states")
-      .select("lexeme_id", { count: "exact", head: true })
-      .lte("due", nowIso),
+      .gte("completed_at", weekAgo.toISOString()),
     getUiStrings(),
   ]);
 
-  const displayName =
-    (claims?.claims?.user_metadata?.display_name as string | undefined) ?? null;
-  const placed = profile.data?.placed ?? false;
-  const minutes = profile.data?.minutes_per_session ?? 12;
+  const displayName = (claims?.claims?.user_metadata?.display_name as string | undefined) ?? null;
   const plan = (profile.data?.prefs as { plan?: string } | null)?.plan ?? null;
   const due = dueCount.count ?? 0;
+  const { streak, placed } = bundle;
 
-  const activeDays = [
-    ...new Set(
-      (sessions.data ?? [])
-        .map((row) => (row.completed_at as string | null)?.slice(0, 10))
-        .filter((day): day is string => Boolean(day)),
-    ),
-  ];
-  const streak = computeStreak(activeDays, new Date(`${isoDay(new Date())}T12:00:00Z`));
+  const activeDays = (recentSessions.data ?? [])
+    .map((row) => (row.completed_at as string | null)?.slice(0, 10))
+    .filter((day): day is string => Boolean(day));
+  const days = recentDays(activeDays, new Date(`${isoDay(now)}T12:00:00Z`));
+
+  const current = stationById(bundle.currentStationId);
+  const currentLine = current ? LINES.find((line) => line.id === current.lineId) : undefined;
+  const currentHref = current ? `/station/${current.id}` : "/";
+  const talkUnlocked = bundle.progress.speakingRung === "free-conversation";
+  const grades = Object.fromEntries(bundle.stations.map((row) => [row.stationId, row.bestGrade]));
 
   const detours = [
-    { mode: "review", label: t.home.detourReview, icon: "refresh" as const },
-    { mode: "ear", label: t.home.detourEar, icon: "ear" as const },
-    { mode: "speak", label: t.home.detourSpeak, icon: "mic" as const },
-  ];
+    { mode: "review", label: t.home.detourReview, Icon: RefreshCw, locked: false },
+    { mode: "ear", label: t.home.detourEar, Icon: Ear, locked: false },
+    { mode: "speak", label: t.home.detourSpeak, Icon: Mic, locked: false },
+    { mode: "talk", label: t.home.detourTalk, Icon: MessageCircle, locked: !talkUnlocked },
+  ] as const;
 
   return (
     <HomeClient>
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-5 py-10 stagger-children">
-        <header className="flex flex-col gap-2">
-          <p className="font-display text-sm font-semibold uppercase tracking-[0.2em] text-accent">
-            Learn German
-          </p>
-          <h1 className="font-display text-4xl font-bold tracking-tight">
+      <main className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col gap-6 px-gutter pt-10 pb-6 stagger-children">
+        <header className="flex flex-col gap-3">
+          <Eyebrow tone="accent">{t.home.eyebrow}</Eyebrow>
+          <h1 className="font-display text-display-xl text-ink">
             {streak.returning
               ? t.home.welcomeBack
               : displayName
@@ -66,136 +94,117 @@ export default async function Heute() {
                 : t.home.helloPlain}
           </h1>
           {streak.length > 0 ? (
-            <StreakDisplay
+            <Streak
+              days={days}
               length={streak.length}
-              frozeYesterday={streak.frozeYesterday}
               activeToday={streak.activeToday}
-              t={t}
+              frozeYesterday={streak.frozeYesterday}
             />
           ) : streak.returning ? (
-            <p className="text-sm text-muted">{t.home.returningNote}</p>
+            <p className="text-body-sm text-ink-muted">{t.home.returningNote}</p>
           ) : null}
         </header>
 
         {!placed ? (
-          <Card className="flex flex-col gap-4">
+          <Card variant="raised" className="flex flex-col gap-4">
             <SectionLabel>{t.home.startLabel}</SectionLabel>
-            <p className="text-[15px] leading-relaxed">{t.home.startBody}</p>
-            <Link href="/willkommen">
-              <Button className="w-full">{t.home.letsGo}</Button>
+            <p className="text-body text-ink">{t.home.startBody}</p>
+            <Link href="/willkommen" className="block rounded-md">
+              <Button fullWidth size="lg" tabIndex={-1}>
+                {t.home.letsGo}
+              </Button>
             </Link>
           </Card>
         ) : (
           <>
-            <Card lifted className="flex flex-col gap-4">
-              <SectionLabel>{t.home.todayRound}</SectionLabel>
-              <p className="text-[15px] leading-relaxed">
-                {t.home.aboutMinutes(minutes)}
-                {due > 0 && (
-                  <>
+            {current && currentLine ? (
+              <Card variant="raised" className="flex flex-col gap-4">
+                <SectionLabel>{t.home.nextStation}</SectionLabel>
+                <StationSign
+                  name={current.name}
+                  subtitle={lang === "de" ? current.title : current.titleEn}
+                  line={Math.min(5, Math.max(1, currentLine.number)) as LineNumber}
+                  status="current"
+                  index={current.order}
+                  statusLabel={t.home.status.current}
+                />
+                <p className="text-body text-ink">
+                  {current.canDoEn}
+                  <span className="text-ink-muted">
                     {" · "}
-                    <span className="inline-flex items-center gap-1 font-semibold">
-                      <DueIcon />
-                      {t.home.wordsWaiting(due)}
-                    </span>
-                  </>
-                )}
-              </p>
-              <Link href="/session">
-                <Button className="w-full py-3.5 text-base">
-                  {streak.activeToday ? t.home.anotherRound : t.home.startRound}
-                </Button>
-              </Link>
+                    <span className="tabular">{t.home.minutes(current.minutes)}</span>
+                  </span>
+                </p>
+                <div className="flex flex-col gap-2">
+                  <Link href={currentHref} className="block rounded-md">
+                    <Button fullWidth size="lg" tabIndex={-1}>
+                      {t.home.board}
+                    </Button>
+                  </Link>
+                  {due > 0 && (
+                    <Link href={`${currentHref}?modus=review`} className="block rounded-md">
+                      <Button variant="secondary" fullWidth tabIndex={-1} icon={<RefreshCw className="size-4" aria-hidden />}>
+                        {t.home.reviewDue(due)}
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </Card>
+            ) : (
+              <Card variant="raised">
+                <p className="text-body text-ink">{t.home.courseEmpty}</p>
+              </Card>
+            )}
+
+            <Card flush className="flex flex-col gap-1 py-4">
+              <div className="flex items-baseline justify-between px-5">
+                <SectionLabel>{t.home.mapTitle}</SectionLabel>
+                <span className="text-caption text-ink-muted">{t.home.mapHint}</span>
+              </div>
+              <LineMap
+                lines={LINES.map(toMapLine)}
+                statuses={bundle.statuses}
+                currentStationId={current?.id ?? null}
+                grades={grades}
+                talkUnlocked={talkUnlocked}
+              />
             </Card>
 
-            <div className="flex flex-col gap-2">
-              <SectionLabel>{t.home.detoursLabel}</SectionLabel>
-              <div className="grid grid-cols-3 gap-2">
-                {detours.map((detour) => (
-                  <Link
-                    key={detour.mode}
-                    href={`/session?modus=${detour.mode}`}
-                    className="flex items-center gap-2 rounded-xl border border-line bg-surface p-3 transition-all duration-200 hover:border-accent-bright hover:shadow-md hover:-translate-y-0.5"
-                  >
-                    <DetourIcon type={detour.icon} />
-                    <span className="text-sm font-semibold">{detour.label}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
+            {current && (
+              <section className="flex flex-col gap-2">
+                <SectionLabel>{t.home.detoursLabel}</SectionLabel>
+                <ul className="grid grid-cols-2 gap-2">
+                  {detours.map(({ mode, label, Icon, locked }) => (
+                    <li key={mode}>
+                      <Link
+                        href={`${currentHref}?modus=${mode}`}
+                        className="flex min-h-14 items-center gap-3 rounded-lg border border-hairline bg-surface px-4 py-3 shadow-flat transition-[border-color,box-shadow,transform] hover:border-accent hover:shadow-raised active:scale-[0.99]"
+                      >
+                        <Icon className="size-5 shrink-0 text-accent" aria-hidden />
+                        <span className="flex min-w-0 flex-col">
+                          <span className="text-body-sm font-semibold text-ink">{label}</span>
+                          {locked && (
+                            <span className="flex items-center gap-1 text-caption text-ink-muted">
+                              <Lock className="size-3" aria-hidden />
+                              {t.home.talkLocked}
+                            </span>
+                          )}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </>
         )}
 
         {plan && (
-          <p className="text-center text-sm italic text-muted">
+          <p className="text-center text-body-sm italic text-ink-muted">
             &bdquo;{plan}&ldquo;
           </p>
         )}
       </main>
     </HomeClient>
-  );
-}
-
-function StreakDisplay({
-  length,
-  frozeYesterday,
-  activeToday,
-  t,
-}: {
-  length: number;
-  frozeYesterday: boolean;
-  activeToday: boolean;
-  t: Awaited<ReturnType<typeof getUiStrings>>["t"];
-}) {
-  return (
-    <p className="flex items-center gap-1.5 text-sm text-muted">
-      <svg
-        viewBox="0 0 24 24"
-        className={`size-4 ${activeToday ? "animate-pulse-soft text-streak-warm" : "text-muted"}`}
-        fill="currentColor"
-        aria-hidden
-      >
-        <path d="M12 2c.5 3.5 4 6.5 4 10a4 4 0 1 1-8 0c0-3.5 3.5-6.5 4-10Z" />
-      </svg>
-      <span className="font-semibold text-foreground animate-count-up">
-        {t.home.streakDays(length)}
-      </span>
-      {frozeYesterday && t.home.streakFroze}
-      {activeToday && t.home.streakToday}
-    </p>
-  );
-}
-
-function DueIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-3.5 text-accent-bright" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-      <path d="M16 3v4M8 3v4M2 11h20" />
-    </svg>
-  );
-}
-
-function DetourIcon({ type }: { type: "refresh" | "ear" | "mic" }) {
-  const cls = "size-4 text-accent-bright shrink-0";
-  if (type === "refresh")
-    return (
-      <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-        <path d="M21 3v5h-5" />
-      </svg>
-    );
-  if (type === "ear")
-    return (
-      <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M6 8.5a6.5 6.5 0 1 1 13 0c0 6-6 6.5-6 14.5" />
-        <path d="M15 8.5a2.5 2.5 0 0 0-5 0v1a2 2 0 0 0 4 0" />
-      </svg>
-    );
-  return (
-    <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-      <line x1="12" x2="12" y1="19" y2="22" />
-    </svg>
   );
 }

@@ -1,22 +1,27 @@
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { checkServices } from "@/lib/health";
 import { createClient } from "@/lib/supabase/server";
+import { loadStationProgress } from "@/lib/engine/store";
+import { currentStation, lineOf, STATIONS } from "@/lib/curriculum";
 import { logout } from "@/app/login/actions";
 import { getUiStrings } from "@/lib/i18n/server";
 import { parseUiLang } from "@/lib/i18n/strings";
-import { Card, SectionLabel } from "@/components/ui";
+import { Card, Eyebrow, SectionLabel, StationSign, cn, type LineNumber } from "@/components/ui";
 import { SettingsForm } from "./settings-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function Du() {
   const supabase = await createClient();
-  const [{ data: claims }, profile, checks, { lang, t }] = await Promise.all([
+  const [{ data: claims }, profile, checks, stationRows, { lang, t }] = await Promise.all([
     supabase.auth.getClaims(),
     supabase
       .from("learner_profiles")
-      .select("minutes_per_session, coverage_target, prefs")
+      .select("minutes_per_session, coverage_target, prefs, placed")
       .maybeSingle(),
     checkServices(),
+    loadStationProgress(supabase),
     getUiStrings(),
   ]);
 
@@ -27,17 +32,44 @@ export default async function Du() {
   const prefs = profile.data?.prefs as { plan?: string; uiLang?: string } | null;
   const plan = prefs?.plan ?? "";
   const uiLang = prefs?.uiLang ? parseUiLang(prefs.uiLang) : lang;
+  const placed = profile.data?.placed ?? false;
+
+  const current = STATIONS.length > 0 ? currentStation(stationRows) : null;
+  const currentLine = current ? lineOf(current) : null;
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-5 py-10 stagger-children">
-      <header className="flex flex-col gap-1">
-        <p className="font-display text-sm font-semibold uppercase tracking-[0.2em] text-accent">
-          {t.du.eyebrow}
-        </p>
-        <h1 className="font-display text-4xl font-bold tracking-tight">
-          {t.du.title}
-        </h1>
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-gutter pt-10 pb-6 stagger-children">
+      <header className="flex flex-col gap-3">
+        <Eyebrow tone="accent">{t.du.eyebrow}</Eyebrow>
+        <h1 className="font-display text-display-xl text-ink">{t.du.title}</h1>
       </header>
+
+      <Card className="flex flex-col gap-3">
+        <SectionLabel>{t.du.course}</SectionLabel>
+        {current && currentLine && placed ? (
+          <>
+            <p className="text-body-sm text-ink-muted">{t.du.currentStation}</p>
+            <StationSign
+              name={current.name}
+              subtitle={lang === "de" ? current.title : current.titleEn}
+              line={Math.min(5, Math.max(1, currentLine.number)) as LineNumber}
+              status="current"
+              index={current.order}
+              statusLabel={t.home.status.current}
+              href={`/station/${current.id}`}
+            />
+          </>
+        ) : (
+          <p className="text-body-sm text-ink-muted">{placed ? t.du.courseEmpty : t.home.startBody}</p>
+        )}
+        <Link
+          href={placed ? "/" : "/willkommen"}
+          className="inline-flex min-h-11 items-center gap-1 self-start font-semibold text-accent hover:underline"
+        >
+          {placed ? t.du.toMap : t.home.letsGo}
+          <ChevronRight className="size-4" aria-hidden />
+        </Link>
+      </Card>
 
       <Card>
         <SettingsForm
@@ -52,15 +84,16 @@ export default async function Du() {
         <SectionLabel>{t.du.services}</SectionLabel>
         <ul className="flex flex-col gap-2">
           {checks.map((check) => (
-            <li key={check.name} className="flex items-center gap-2.5 text-sm">
+            <li key={check.name} className="flex items-center gap-2.5 text-body-sm">
               <span
                 aria-hidden
-                className={`size-2.5 shrink-0 rounded-full transition-colors ${
-                  check.ok ? "bg-success" : check.required ? "bg-error animate-pulse-soft" : "bg-muted"
-                }`}
+                className={cn(
+                  "size-2.5 shrink-0 rounded-pill",
+                  check.ok ? "bg-success-fill" : check.required ? "bg-error-fill" : "bg-ink-faint",
+                )}
               />
-              <span className="font-medium">{check.name}</span>
-              <span className="ml-auto truncate text-xs text-muted" title={check.detail}>
+              <span className="font-medium text-ink">{check.name}</span>
+              <span className="ml-auto truncate text-caption text-ink-muted" title={check.detail}>
                 {check.detail}
               </span>
             </li>
@@ -68,12 +101,12 @@ export default async function Du() {
         </ul>
       </Card>
 
-      <footer className="flex flex-col items-center gap-1 pb-2 text-xs text-muted">
+      <footer className="flex flex-col items-center gap-1 pb-2 text-caption text-ink-muted">
         {email && (
           <form action={logout} className="flex items-center gap-2">
             <span>{t.du.signedInAs(email)}</span>
             <span aria-hidden>&middot;</span>
-            <button type="submit" className="font-medium text-accent-bright hover:underline transition-colors">
+            <button type="submit" className="min-h-11 font-medium text-accent hover:underline">
               {t.du.signOut}
             </button>
           </form>

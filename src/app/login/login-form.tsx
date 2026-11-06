@@ -3,153 +3,96 @@
 import { useActionState, useState } from "react";
 import { login, signup, type AuthState } from "./actions";
 import { useStrings, useUiLang } from "@/components/i18n-provider";
+import { Button, Card, Field } from "@/components/ui";
 
 const initialState: AuthState = { error: null };
-
-const inputClasses =
-  "w-full rounded-lg border border-line bg-background px-3 py-2.5 text-sm " +
-  "outline-none transition focus:border-accent-bright focus:ring-2 " +
-  "focus:ring-accent-bright/30";
-
-const labelClasses =
-  "mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted";
-
-function SubmitButton({
-  label,
-  pendingLabel,
-  pending,
-}: {
-  label: string;
-  pendingLabel: string;
-  pending: boolean;
-}) {
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="w-full rounded-lg bg-accent py-2.5 text-sm font-semibold
-        text-white transition hover:bg-accent-bright disabled:opacity-60"
-    >
-      {pending ? pendingLabel : label}
-    </button>
-  );
-}
-
-function ErrorNote({ error }: { error: string | null }) {
-  if (!error) return null;
-  return (
-    <p role="alert" className="text-sm text-error">
-      {error}
-    </p>
-  );
-}
 
 export function LoginPanel() {
   const t = useStrings();
   const uiLang = useUiLang();
   const [mode, setMode] = useState<"login" | "signup">("login");
-  const [loginState, loginAction, loginPending] = useActionState(
-    login,
-    initialState,
-  );
-  const [signupState, signupAction, signupPending] = useActionState(
-    signup,
-    initialState,
-  );
+  const [loginState, loginAction, loginPending] = useActionState(login, initialState);
+  const [signupState, signupAction, signupPending] = useActionState(signup, initialState);
 
   const isLogin = mode === "login";
+  const error = isLogin ? loginState.error : signupState.error;
+  const pending = isLogin ? loginPending : signupPending;
 
   return (
-    <section className="w-full max-w-sm rounded-2xl border border-line bg-surface p-8 shadow-sm">
+    <Card variant="raised" className="w-full max-w-sm p-7">
       <header className="mb-6 flex flex-col gap-1.5">
-        <h1 className="font-display text-3xl font-bold tracking-tight">
+        <h1 className="font-display text-display-l text-ink">
           {isLogin ? t.login.titleLogin : t.login.titleSignup}
         </h1>
-        <p className="text-sm text-muted">
+        <p className="text-body-sm text-ink-muted">
           {isLogin ? t.login.subLogin : t.login.subSignup}
         </p>
       </header>
 
-      <form
-        action={isLogin ? loginAction : signupAction}
-        className="flex flex-col gap-4"
-      >
+      <form action={isLogin ? loginAction : signupAction} className="flex flex-col gap-4">
         {!isLogin && (
-          <div>
-            <label htmlFor="displayName" className={labelClasses}>
-              {t.login.name} <span className="normal-case">{t.login.optional}</span>
-            </label>
-            <input
-              id="displayName"
-              name="displayName"
-              type="text"
-              autoComplete="name"
-              placeholder={t.login.namePlaceholder}
-              className={inputClasses}
-            />
-          </div>
+          <Field
+            label={
+              <>
+                {t.login.name} <span className="font-normal text-ink-muted">{t.login.optional}</span>
+              </>
+            }
+            id="displayName"
+            name="displayName"
+            type="text"
+            autoComplete="name"
+            placeholder={t.login.namePlaceholder}
+          />
         )}
 
-        <div>
-          <label htmlFor="email" className={labelClasses}>
-            {t.login.email}
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            className={inputClasses}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="password" className={labelClasses}>
-            {t.login.password}
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            required
-            autoComplete={isLogin ? "current-password" : "new-password"}
-            minLength={isLogin ? undefined : 8}
-            className={inputClasses}
-          />
-        </div>
-
-        <ErrorNote error={isLogin ? loginState.error : signupState.error} />
-
-        <SubmitButton
-          label={isLogin ? t.login.signIn : t.login.createAccount}
-          pendingLabel={t.common.oneMoment}
-          pending={isLogin ? loginPending : signupPending}
+        <Field
+          label={t.login.email}
+          id="email"
+          name="email"
+          type="email"
+          required
+          autoComplete="email"
+          inputMode="email"
         />
+
+        <Field
+          label={t.login.password}
+          id="password"
+          name="password"
+          type="password"
+          required
+          autoComplete={isLogin ? "current-password" : "new-password"}
+          minLength={isLogin ? undefined : 8}
+          error={error}
+        />
+
+        <Button type="submit" size="lg" loading={pending} className="mt-1">
+          {isLogin ? t.login.signIn : t.login.createAccount}
+        </Button>
       </form>
 
-      <p className="mt-5 text-center text-sm text-muted">
+      <p className="mt-5 text-center text-body-sm text-ink-muted">
         {isLogin ? t.login.newHere : t.login.haveAccount}{" "}
         <button
           type="button"
           onClick={() => setMode(isLogin ? "signup" : "login")}
-          className="font-medium text-accent-bright hover:underline"
+          className="min-h-11 font-semibold text-accent hover:underline"
         >
           {isLogin ? t.login.createAccount : t.login.signIn}
         </button>
       </p>
 
-      <p className="mt-6 border-t border-line pt-4 text-center text-xs text-muted">
+      <p className="mt-5 border-t border-hairline pt-4 text-center text-caption text-ink-muted">
         {t.login.staySignedIn}
         {uiLang === "de" && (
           <>
             <br />
-            <span className="opacity-75">
+            <span lang="en" className="opacity-80">
               You&apos;ll stay signed in on this device.
             </span>
           </>
         )}
       </p>
-    </section>
+    </Card>
   );
 }

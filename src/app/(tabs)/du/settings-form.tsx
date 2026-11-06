@@ -1,89 +1,18 @@
 "use client";
 
 import { useActionState, useCallback, useEffect, useRef, useState } from "react";
+import { Check, Download, Share, Volume1, Volume2, VolumeX } from "lucide-react";
 import { saveSettings, type SettingsState } from "./actions";
-import { setSoundEnabled, soundEnabled } from "@/lib/audio/sound";
+import { playTap, setSoundEnabled, setSoundVolume, soundEnabled, soundVolume } from "@/lib/audio/sound";
+import { speak, stopSpeaking } from "@/lib/audio/tts";
 import { useStrings } from "@/components/i18n-provider";
 import type { UiLang } from "@/lib/i18n/strings";
-import { Button, SectionLabel } from "@/components/ui";
+import { Button, Eyebrow, Field, SectionLabel, Segmented, Toggle } from "@/components/ui";
 
 const initialState: SettingsState = { saved: false, error: null };
 
-function Segmented<T extends string>({
-  name,
-  options,
-  value,
-  onChange,
-}: {
-  name: string;
-  options: { value: T; label: string; hint?: string }[];
-  value: T;
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div className="flex gap-1.5" role="radiogroup" aria-label={name}>
-      {options.map((option) => (
-        <label
-          key={option.value}
-          className={`flex flex-1 cursor-pointer flex-col items-center gap-0.5 rounded-xl border px-2 py-2.5 text-center transition-all duration-200 ${
-            value === option.value
-              ? "border-accent-bright bg-accent/10 font-semibold text-accent-bright shadow-sm scale-[1.02]"
-              : "border-line text-muted hover:border-accent-bright/50 hover:shadow-sm"
-          }`}
-        >
-          <input
-            type="radio"
-            name={name}
-            value={option.value}
-            checked={value === option.value}
-            onChange={() => onChange(option.value)}
-            className="sr-only"
-          />
-          <span className="text-sm">{option.label}</span>
-          {option.hint && <span className="text-[10px] leading-tight">{option.hint}</span>}
-        </label>
-      ))}
-    </div>
-  );
-}
-
-function Toggle({
-  label,
-  hint,
-  checked,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label className="flex cursor-pointer items-center justify-between gap-3">
-      <span>
-        <span className="block text-sm font-medium">{label}</span>
-        <span className="block text-xs text-muted">{hint}</span>
-      </span>
-      <span
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-all duration-200 ${
-          checked ? "bg-accent-bright" : "bg-line"
-        }`}
-      >
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(event) => onChange(event.target.checked)}
-          className="sr-only"
-        />
-        <span
-          className={`absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-all duration-200 ${
-            checked ? "left-[22px]" : "left-0.5"
-          }`}
-        />
-      </span>
-    </label>
-  );
-}
+/** What Jule says when the learner tests her voice: German content, not chrome. */
+const VOICE_TEST_LINE = "Servus, ich bin Jule. Schön, dass du da bist — steigen wir ein?";
 
 type InstallState = "hidden" | "prompt" | "ios" | "installed";
 
@@ -139,6 +68,11 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+type Minutes = "5" | "8" | "12" | "15";
+type Challenge = "sanft" | "standard" | "mutig";
+
+const CHALLENGE_PCT: Record<Challenge, number> = { sanft: 97, standard: 95, mutig: 93 };
+
 export function SettingsForm({
   initialMinutes,
   initialChallenge,
@@ -146,40 +80,65 @@ export function SettingsForm({
   initialUiLang,
 }: {
   initialMinutes: 5 | 8 | 12 | 15;
-  initialChallenge: "sanft" | "standard" | "mutig";
+  initialChallenge: Challenge;
   initialPlan: string;
   initialUiLang: UiLang;
 }) {
   const t = useStrings();
   const [state, action, pending] = useActionState(saveSettings, initialState);
-  const [minutes, setMinutes] = useState(String(initialMinutes));
-  const [challenge, setChallenge] = useState(initialChallenge);
+  const [minutes, setMinutes] = useState<Minutes>(String(initialMinutes) as Minutes);
+  const [challenge, setChallenge] = useState<Challenge>(initialChallenge);
   const [uiLang, setUiLang] = useState<UiLang>(initialUiLang);
   const [sound, setSound] = useState(true);
+  const [volume, setVolume] = useState(100);
   const [dasAmber, setDasAmber] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const { installState, install } = useInstallPrompt();
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       setSound(soundEnabled());
+      setVolume(Math.round(soundVolume() * 100));
       setDasAmber(window.localStorage.getItem("lg:das-amber") === "on");
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      stopSpeaking();
+    };
   }, []);
+
+  const testVoice = async () => {
+    if (speaking) {
+      stopSpeaking();
+      setSpeaking(false);
+      return;
+    }
+    setSpeaking(true);
+    try {
+      await speak(VOICE_TEST_LINE, { voice: "jule" });
+    } finally {
+      setSpeaking(false);
+    }
+  };
+
+  const VolumeIcon = volume === 0 ? VolumeX : volume < 50 ? Volume1 : Volume2;
 
   return (
     <form action={action} className="flex flex-col gap-6">
+      {/* Segmented controls are buttons; the chosen values post through these. */}
+      <input type="hidden" name="uiLang" value={uiLang} />
+      <input type="hidden" name="minutes" value={minutes} />
+      <input type="hidden" name="challenge" value={challenge} />
+
       <div className="flex flex-col gap-2.5">
-        <SectionLabel>
-          <span className="inline-flex items-center gap-1.5">
-            <SettingsIcon type="language" />
-            {t.settings.language}
-          </span>
-        </SectionLabel>
-        <Segmented
-          name="uiLang"
+        <Eyebrow as="h2" id="settings-language">{t.settings.language}</Eyebrow>
+        <Segmented<UiLang>
+          aria-labelledby="settings-language"
           value={uiLang}
-          onChange={setUiLang}
+          onChange={(next) => {
+            playTap();
+            setUiLang(next);
+          }}
           options={[
             { value: "de", label: "Deutsch" },
             { value: "en", label: "English" },
@@ -188,16 +147,14 @@ export function SettingsForm({
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <SectionLabel>
-          <span className="inline-flex items-center gap-1.5">
-            <SettingsIcon type="clock" />
-            {t.settings.roundLength}
-          </span>
-        </SectionLabel>
-        <Segmented
-          name="minutes"
+        <Eyebrow as="h2" id="settings-minutes">{t.settings.roundLength}</Eyebrow>
+        <Segmented<Minutes>
+          aria-labelledby="settings-minutes"
           value={minutes}
-          onChange={setMinutes}
+          onChange={(next) => {
+            playTap();
+            setMinutes(next);
+          }}
           options={[
             { value: "5", label: "5 min" },
             { value: "8", label: "8 min" },
@@ -208,61 +165,100 @@ export function SettingsForm({
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <SectionLabel>
-          <span className="inline-flex items-center gap-1.5">
-            <SettingsIcon type="target" />
-            {t.settings.challenge}
-          </span>
-        </SectionLabel>
-        <Segmented
-          name="challenge"
+        <Eyebrow as="h2" id="settings-challenge">{t.settings.challenge}</Eyebrow>
+        <Segmented<Challenge>
+          aria-labelledby="settings-challenge"
           value={challenge}
-          onChange={setChallenge}
+          onChange={(next) => {
+            playTap();
+            setChallenge(next);
+          }}
           options={[
-            { value: "sanft", label: t.settings.gentle, hint: t.settings.knownHint(97) },
-            { value: "standard", label: t.settings.standard, hint: t.settings.knownHint(95) },
-            { value: "mutig", label: t.settings.brave, hint: t.settings.knownHint(93) },
+            { value: "sanft", label: t.settings.gentle },
+            { value: "standard", label: t.settings.standard },
+            { value: "mutig", label: t.settings.brave },
           ]}
         />
-        <p className="text-xs text-muted">{t.settings.challengeNote}</p>
+        <p className="text-caption text-ink-muted">
+          <span className="tabular">{t.settings.knownHint(CHALLENGE_PCT[challenge])}</span>
+          {" — "}
+          {t.settings.challengeNote}
+        </p>
       </div>
 
-      <div className="flex flex-col gap-2.5">
-        <SectionLabel>
-          <span className="inline-flex items-center gap-1.5">
-            <SettingsIcon type="anchor" />
-            {t.settings.anchor}
-          </span>
-        </SectionLabel>
-        <input
-          type="text"
-          name="plan"
-          defaultValue={initialPlan}
-          maxLength={140}
-          placeholder={t.settings.anchorPlaceholder}
-          className="w-full rounded-xl border border-line bg-background px-3 py-2.5 text-sm outline-none transition-all duration-200 focus:border-accent-bright focus:ring-2 focus:ring-accent-glow focus:shadow-md"
-        />
-      </div>
+      <Field
+        label={t.settings.anchor}
+        name="plan"
+        defaultValue={initialPlan}
+        maxLength={140}
+        placeholder={t.settings.anchorPlaceholder}
+        autoComplete="off"
+      />
 
-      <div className="flex flex-col gap-4">
-        <SectionLabel>
-          <span className="inline-flex items-center gap-1.5">
-            <SettingsIcon type="device" />
-            {t.settings.device}
-          </span>
-        </SectionLabel>
+      <div className="flex flex-col gap-3">
+        <SectionLabel>{t.settings.device}</SectionLabel>
         <Toggle
           label={t.settings.sounds}
-          hint={t.settings.soundsHint}
+          description={t.settings.soundsHint}
           checked={sound}
           onChange={(on) => {
             setSound(on);
             setSoundEnabled(on);
+            if (on) playTap();
           }}
         />
+        <div className="flex flex-col gap-1.5 px-1">
+          <label htmlFor="settings-volume" className="flex items-center justify-between">
+            <span className="flex flex-col">
+              <span className="text-body font-medium text-ink">{t.settings.volume}</span>
+              <span className="text-body-sm text-ink-muted">{t.settings.volumeHint}</span>
+            </span>
+            <span className="text-body-sm tabular text-ink-muted">{volume} %</span>
+          </label>
+          <div className="flex min-h-11 items-center gap-3">
+            <VolumeIcon className="size-5 shrink-0 text-ink-muted" aria-hidden />
+            <input
+              id="settings-volume"
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={volume}
+              disabled={!sound}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setVolume(next);
+                setSoundVolume(next / 100);
+              }}
+              onPointerUp={() => playTap()}
+              onKeyUp={(event) => {
+                if (event.key.startsWith("Arrow") || event.key === "Home" || event.key === "End") playTap();
+              }}
+              className="h-11 w-full cursor-pointer accent-accent disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-4 px-1">
+          <span className="flex min-w-0 flex-col">
+            <span className="text-body font-medium text-ink">{t.settings.testVoice}</span>
+            <span className="text-body-sm text-ink-muted">
+              {speaking ? t.settings.testVoiceSpeaking : t.settings.testVoiceHint}
+            </span>
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            aria-pressed={speaking}
+            onClick={testVoice}
+            icon={<Volume2 className="size-4" aria-hidden />}
+          >
+            {t.settings.testVoice}
+          </Button>
+        </div>
         <Toggle
           label={t.settings.dasAmber}
-          hint={t.settings.dasAmberHint}
+          description={t.settings.dasAmberHint}
           checked={dasAmber}
           onChange={(on) => {
             setDasAmber(on);
@@ -274,86 +270,44 @@ export function SettingsForm({
           <button
             type="button"
             onClick={install}
-            className="flex items-center gap-2.5 rounded-xl border border-line px-3 py-2.5 text-left transition-all duration-200 hover:border-accent-bright/50 hover:shadow-sm"
+            className="flex min-h-11 items-center gap-3 rounded-md border border-hairline px-3 py-2.5 text-left transition-[border-color,box-shadow] hover:border-accent hover:shadow-flat"
           >
-            <span className="text-base">📲</span>
+            <Download className="size-5 shrink-0 text-accent" aria-hidden />
             <span>
-              <span className="block text-sm font-medium">{t.settings.installTitle}</span>
-              <span className="block text-xs text-muted">{t.settings.installHint}</span>
+              <span className="block text-body-sm font-medium text-ink">{t.settings.installTitle}</span>
+              <span className="block text-caption text-ink-muted">{t.settings.installHint}</span>
             </span>
           </button>
         )}
         {installState === "ios" && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-line px-3 py-2.5">
-            <span className="text-base">📲</span>
+          <div className="flex items-start gap-3 rounded-md border border-hairline px-3 py-2.5">
+            <Download className="mt-0.5 size-5 shrink-0 text-accent" aria-hidden />
             <span>
-              <span className="block text-sm font-medium">{t.settings.installTitle}</span>
-              <span className="block text-xs text-muted">
+              <span className="block text-body-sm font-medium text-ink">{t.settings.installTitle}</span>
+              <span className="block text-caption text-ink-muted">
                 {t.settings.installIosPrefix}{" "}
-                <span className="inline-flex translate-y-px text-base leading-none">
-                  ⎙
-                </span>{" "}
+                <Share className="inline size-3.5 align-text-bottom" aria-hidden />{" "}
                 {t.settings.installIosSuffix}
               </span>
             </span>
           </div>
         )}
         {installState === "installed" && (
-          <div className="flex items-center gap-2.5 px-3 py-1 text-sm text-muted">
-            <span className="text-success">✓</span>
+          <div className="flex items-center gap-2.5 px-1 text-body-sm text-ink-muted">
+            <Check className="size-4 text-success" aria-hidden />
             <span>{t.settings.installedNote}</span>
           </div>
         )}
       </div>
 
       {state.error && (
-        <p role="alert" className="text-sm text-error animate-shake">
+        <p role="alert" className="text-body-sm font-medium text-error animate-shake">
           {state.error}
         </p>
       )}
-      <Button type="submit" disabled={pending}>
-        {pending ? t.common.oneMoment : state.saved ? t.settings.saved : t.settings.save}
+      <Button type="submit" loading={pending} size="lg">
+        {state.saved && !pending ? t.settings.saved : t.settings.save}
       </Button>
     </form>
-  );
-}
-
-function SettingsIcon({ type }: { type: "language" | "clock" | "target" | "anchor" | "device" }) {
-  const cls = "size-3.5 text-muted";
-  if (type === "language")
-    return (
-      <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="12" cy="12" r="10" />
-        <path d="M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10" />
-      </svg>
-    );
-  if (type === "clock")
-    return (
-      <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
-      </svg>
-    );
-  if (type === "target")
-    return (
-      <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="12" cy="12" r="10" />
-        <circle cx="12" cy="12" r="6" />
-        <circle cx="12" cy="12" r="2" />
-      </svg>
-    );
-  if (type === "anchor")
-    return (
-      <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="12" cy="5" r="3" />
-        <line x1="12" x2="12" y1="22" y2="8" />
-        <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
-      </svg>
-    );
-  return (
-    <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
-      <line x1="12" x2="12.01" y1="18" y2="18" />
-    </svg>
   );
 }
