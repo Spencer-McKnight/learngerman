@@ -7,6 +7,10 @@ const withSerwist = withSerwistInit({
   disable: process.env.NODE_ENV === "development",
 });
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  // msedge-tts drives a WebSocket (ws) from the TTS route; keep it a
+  // runtime require rather than letting webpack bundle it.
+  serverExternalPackages: ["msedge-tts"],
+};
 
 export default withSerwist(nextConfig);
