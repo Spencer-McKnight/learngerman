@@ -1,10 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Placeholder app icon in the Autobahn-sign language: traffic-blue
-       ground, white border, white wordmark. Replace with proper PNG set
-       (192/512, maskable) before shipping to real devices. -->
-  <rect width="512" height="512" rx="96" fill="#154889"/>
-  <rect x="28" y="28" width="456" height="456" rx="72" fill="none" stroke="#ffffff" stroke-width="20"/>
-  <text x="256" y="300" text-anchor="middle" font-family="Barlow, 'Arial Narrow', Arial, sans-serif" font-weight="700" font-size="200" fill="#ffffff">DE</text>
-  <path d="M136 388h192" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
-  <path d="M296 348l60 40-60 40z" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Wegweiser app icon (maskable). Safe zone: the central 80% circle.
+    Porcelain ground, a traffic-blue signpost with two direction blades
+    pointing deeper into Germany, and one Ortsschild-yellow dot: the
+    station the learner stands at. Yellow is reserved for milestones in
+    the UI; here it is the single accent mark.
+  -->
+  <rect width="512" height="512" fill="#F7F6F3"/>
+  <!-- post -->
+  <rect x="244" y="176" width="24" height="248" rx="6" fill="#154889"/>
+  <!-- ground line -->
+  <rect x="172" y="416" width="168" height="16" rx="8" fill="#154889"/>
+  <!-- upper blade, pointing right -->
+  <path d="M136 160 h228 l44 36 l-44 36 h-228 a10 10 0 0 1 -10 -10 v-52 a10 10 0 0 1 10 -10 z" fill="#154889"/>
+  <!-- blade text lines (DIN-like rhythm, abstract) -->
+  <rect x="160" y="188" width="150" height="16" rx="8" fill="#F7F6F3"/>
+  <!-- lower blade, pointing left -->
+  <path d="M376 248 h-228 l-44 36 l44 36 h228 a10 10 0 0 0 10 -10 v-52 a10 10 0 0 0 -10 -10 z" fill="#154889"/>
+  <rect x="202" y="276" width="150" height="16" rx="8" fill="#F7F6F3"/>
+  <!-- the station dot: Ortsschild yellow with ink border -->
+  <circle cx="256" cy="112" r="34" fill="#F7C600" stroke="#1B1F24" stroke-width="10"/>
 </svg>

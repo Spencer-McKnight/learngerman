@@ -1,15 +1,34 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
-interface Mote {
-  x: number;
-  y: number;
-  vy: number;
-  vx: number;
-  radius: number;
-  opacity: number;
-  maxOpacity: number;
+/**
+ * "Regnitz" — the ambient layer behind the home surfaces. The floating
+ * motes were kitsch against a signage identity, so this is two soft
+ * accent-tinted washes drifting very slowly (28 s cycle) on the porcelain
+ * ground, like light on the river. Pure CSS: no canvas, no rAF, no
+ * repaint cost; `prefers-reduced-motion` freezes it via the global rule.
+ * The export name is kept so `HomeClient` needs no change.
+ */
+export function AmbientParticles() {
+  return (
+    <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+      <div
+        className="animate-regnitz absolute -left-1/4 -top-1/4 size-[70vmax] rounded-pill opacity-70 blur-3xl"
+        style={{
+          background: "radial-gradient(closest-side, var(--accent-soft), transparent 70%)",
+        }}
+      />
+      <div
+        className="animate-regnitz absolute -bottom-1/3 -right-1/4 size-[60vmax] rounded-pill opacity-60 blur-3xl"
+        style={{
+          background: "radial-gradient(closest-side, var(--surface-sunken), transparent 70%)",
+          animationDelay: "-14s",
+          animationDirection: "reverse",
+        }}
+      />
+    </div>
+  );
 }
 
 interface Spark {
@@ -22,94 +41,21 @@ interface Spark {
   colour: string;
 }
 
-function isDarkMode() {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-  );
-}
-
 function prefersReducedMotion() {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export function AmbientParticles() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    if (prefersReducedMotion()) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    resize();
-    window.addEventListener("resize", resize);
-
-    const COUNT = 18;
-    const motes: Mote[] = Array.from({ length: COUNT }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      vy: -(0.15 + Math.random() * 0.25),
-      vx: (Math.random() - 0.5) * 0.12,
-      radius: 1.2 + Math.random() * 1.8,
-      opacity: 0,
-      maxOpacity: 0.04 + Math.random() * 0.045,
-    }));
-
-    let raf = 0;
-    let last = 0;
-    const FPS_INTERVAL = 1000 / 15;
-
-    const draw = (now: number) => {
-      raf = requestAnimationFrame(draw);
-      if (now - last < FPS_INTERVAL) return;
-      last = now;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const dark = isDarkMode();
-      const rgb = dark ? "160, 180, 220" : "180, 165, 140";
-
-      for (const m of motes) {
-        m.x += m.vx;
-        m.y += m.vy;
-        if (m.opacity < m.maxOpacity) m.opacity += 0.002;
-        if (m.y < -10) {
-          m.y = canvas.height + 10;
-          m.x = Math.random() * canvas.width;
-          m.opacity = 0;
-        }
-        ctx.beginPath();
-        ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${rgb}, ${m.opacity})`;
-        ctx.fill();
-      }
-    };
-    raf = requestAnimationFrame(draw);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden
-      className="pointer-events-none fixed inset-0 z-0"
-    />
-  );
+function sparkPalette(): string[] {
+  const style = getComputedStyle(document.documentElement);
+  const read = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+  return [read("--accent", "#154889"), read("--accent-hover", "#1d5fd6"), read("--success", "#1f7a33")];
 }
 
-const SPARK_COLOURS = ["#2563eb", "#ffffff", "#0f3d7a", "#7aa5ec"];
-
+/**
+ * A small spark burst at a point (a correct answer). Signage colours
+ * only — accent and success; the yellow stays reserved. Returns `fire`
+ * and the canvas to render once per screen.
+ */
 export function useSparkle() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sparksRef = useRef<Spark[]>([]);
@@ -128,16 +74,17 @@ export function useSparkle() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const newSparks: Spark[] = Array.from({ length: 8 }, () => ({
+    const palette = sparkPalette();
+    const fresh: Spark[] = Array.from({ length: 8 }, () => ({
       x: originX,
       y: originY,
       vx: (Math.random() - 0.5) * 6,
       vy: -(2 + Math.random() * 4),
       radius: 1.5 + Math.random() * 2,
       opacity: 1,
-      colour: SPARK_COLOURS[Math.floor(Math.random() * SPARK_COLOURS.length)],
+      colour: palette[Math.floor(Math.random() * palette.length)],
     }));
-    sparksRef.current = [...sparksRef.current, ...newSparks];
+    sparksRef.current = [...sparksRef.current, ...fresh];
 
     cancelAnimationFrame(rafRef.current);
     const draw = () => {
@@ -164,13 +111,7 @@ export function useSparkle() {
     rafRef.current = requestAnimationFrame(draw);
   }, []);
 
-  const SparkCanvas = (
-    <canvas
-      ref={canvasRef}
-      aria-hidden
-      className="pointer-events-none fixed inset-0 z-[55]"
-    />
-  );
+  const SparkCanvas = <canvas ref={canvasRef} aria-hidden className="pointer-events-none fixed inset-0 z-55" />;
 
   return { fire, SparkCanvas };
 }

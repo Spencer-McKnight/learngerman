@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { MilestoneEvent } from "@/lib/engine";
 import { playMilestone } from "@/lib/audio/sound";
 import { useStrings } from "./i18n-provider";
 import { Confetti } from "./confetti";
-import { Ortsschild } from "./ortsschild";
-import { Button } from "./ui";
+import { Button, Eyebrow, Ortsschild } from "./ui";
 
+/**
+ * The one place the app spends energy: a milestone (a CEFR band, a
+ * vocabulary threshold, a line completed). Dark scrim, confetti in
+ * signage colours, the Ortsschild arriving with a small overshoot, one
+ * button. Queue of events; `onDone` after the last one.
+ */
 export function MilestoneOverlay({
   events,
   onDone,
@@ -16,6 +21,7 @@ export function MilestoneOverlay({
   onDone: () => void;
 }) {
   const t = useStrings();
+  const titleId = useId();
   const [index, setIndex] = useState(0);
   const [showSign, setShowSign] = useState(false);
   const event = events[index];
@@ -23,37 +29,47 @@ export function MilestoneOverlay({
   useEffect(() => {
     if (!event) return;
     playMilestone();
-    const timer = setTimeout(() => setShowSign(true), 400);
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => setShowSign(true), 350);
+    return () => window.clearTimeout(timer);
   }, [index, event]);
 
   if (!event) return null;
 
+  const last = index + 1 >= events.length;
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-[#141719]/88 px-6 backdrop-blur-md">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-scrim px-gutter backdrop-blur-md"
+    >
       <Confetti burst={index + 1} />
 
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div
-          key={`glow-${index}`}
-          className="size-32 rounded-full bg-milestone/30 animate-glow-ring"
-        />
+      <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div key={`glow-${index}`} className="size-32 rounded-pill bg-milestone/30 animate-glow-ring" />
       </div>
 
-      <p className="relative font-display text-sm font-semibold uppercase tracking-[0.2em] text-[#f7c600]">
+      <Eyebrow tone="milestone" className="relative tracking-[0.2em]">
         {t.milestone.arrived}
-      </p>
+      </Eyebrow>
+      <h2 id={titleId} className="sr-only">
+        {event.label}
+        {event.detail ? ` — ${event.detail}` : ""}
+      </h2>
       {showSign && (
-        <div className="animate-sign-pop relative">
+        <div key={`sign-${index}`} className="relative animate-sign-arrive">
           <Ortsschild label={event.label} detail={event.detail} />
         </div>
       )}
       {showSign && (
         <Button
-          variant="outline"
-          className="relative min-w-40 animate-fade-up border-[#f7c600]/30 text-white hover:border-[#f7c600]/60"
+          variant="secondary"
+          size="lg"
+          autoFocus
+          className="relative min-w-44 animate-fade-up border-white/30 bg-transparent text-white shadow-none hover:border-milestone hover:bg-white/10 hover:text-white"
           onClick={() => {
-            if (index + 1 < events.length) {
+            if (!last) {
               setShowSign(false);
               setIndex(index + 1);
             } else {
