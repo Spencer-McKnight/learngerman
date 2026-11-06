@@ -12,6 +12,15 @@ export const EPISODE_MODEL = process.env.AI_MODEL ?? "google/gemini-2.5-flash";
 export const CHAT_MODEL = process.env.AI_CHAT_MODEL ?? "google/gemini-2.5-flash-lite";
 
 /**
+ * Jule's briefings and debriefs: ~100 words of prose per call, one
+ * call per station visit, so they ride the chat tier by default.
+ * Override with AI_COACH_MODEL if her voice needs a stronger writer
+ * than the lite model gives. Scene variations are whole-scene
+ * generations and use EPISODE_MODEL (see /api/scene).
+ */
+export const COACH_MODEL = process.env.AI_COACH_MODEL ?? CHAT_MODEL;
+
+/**
  * Fallback models when the primary errors or is rate-limited. Both
  * defaults are AI-Gateway-free-tier accessible (verified live:
  * gemini-2.5-flash/-lite → 200; haiku-4.5 and gpt-5-nano are paid).
