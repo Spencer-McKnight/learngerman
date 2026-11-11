@@ -165,11 +165,25 @@ export async function POST(request: Request) {
 
   if (admin) {
     try {
-      const { error } = await admin.storage.from(BUCKET).upload(path, audio, {
+      let { error } = await admin.storage.from(BUCKET).upload(path, audio, {
         contentType: "audio/mpeg",
         cacheControl: "31536000",
         upsert: true,
       });
+      // A missing bucket (migration skipped the storage schema, or a
+      // fresh project) is created here, once, by the service role.
+      if (error && /bucket.*not found/i.test(error.message)) {
+        await admin.storage.createBucket(BUCKET, {
+          public: true,
+          fileSizeLimit: 5 * 1024 * 1024,
+          allowedMimeTypes: ["audio/mpeg"],
+        });
+        ({ error } = await admin.storage.from(BUCKET).upload(path, audio, {
+          contentType: "audio/mpeg",
+          cacheControl: "31536000",
+          upsert: true,
+        }));
+      }
       if (!error) {
         // The row is written only after the object exists, so a hit
         // never points at audio that is not there.
