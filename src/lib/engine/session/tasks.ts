@@ -12,7 +12,6 @@ import type { LexiconIndex } from "../lexicon/coverage";
 import { analyzeCoverage } from "../lexicon/coverage";
 import { tokenize } from "../lexicon/tokenize";
 import type { SyntaxStage } from "../types";
-import type { EpisodeSection } from "./episode";
 
 /** Every kind of task a session can contain. */
 export type TaskKind =
@@ -122,7 +121,7 @@ export interface TaskSpec {
   /** Item difficulty (logit) for the ability update. */
   difficulty: number;
   /** Which part of the session's episode this task plays. */
-  section?: EpisodeSection;
+  section?: string;
   /** Lexemes graded by this task (retrieval taps, cloze, scene targets). */
   lexemeIds?: string[];
   /** For grammar bites. */
