@@ -6,7 +6,8 @@
  * Never "you are 87% fluent". Never bars that fill because time passed.
  */
 
-import type { CefrBand, LearnerSnapshot } from "../types";
+import type { CefrBand, LearnerSnapshot, SpeakingRung } from "../types";
+import { SPEAKING_RUNGS } from "../types";
 import { isKnown } from "../scheduler/scheduler";
 import { STAGE_NAMES } from "../syntax/stages";
 
@@ -137,12 +138,22 @@ export const CAN_DO: Record<CefrBand, string[]> = {
   C1: ["I can express myself flexibly, with nuance, on almost anything"],
 };
 
+const RUNG_LABELS: Record<SpeakingRung, string> = {
+  shadowing: "Nachsprechen",
+  construct: "Selbst bauen",
+  scripted: "Rollenspiel",
+  "timed-recall": "Auf Zeit",
+  "free-conversation": "Freies Gespräch",
+};
+
 export interface MilestoneEvent {
   kind:
     | "vocab-threshold"
     | "syntax-stage"
     | "contrast-mastered"
     | "cefr-band"
+    | "speaking-rung"
+    | "line-complete"
     | "first-conversation"
     | "streak-week";
   label: string;
@@ -159,12 +170,14 @@ export function detectMilestones(
     stage: number;
     masteredContrasts: string[];
     band: CefrBand;
+    rung?: SpeakingRung;
   },
   after: {
     knownCount: number;
     stage: number;
     masteredContrasts: string[];
     band: CefrBand;
+    rung?: SpeakingRung;
   },
 ): MilestoneEvent[] {
   const events: MilestoneEvent[] = [];
@@ -192,6 +205,17 @@ export function detectMilestones(
         detail: "Du hörst den Unterschied jetzt zuverlässig",
       });
     }
+  }
+  if (
+    before.rung &&
+    after.rung &&
+    SPEAKING_RUNGS.indexOf(after.rung) > SPEAKING_RUNGS.indexOf(before.rung)
+  ) {
+    events.push({
+      kind: "speaking-rung",
+      label: RUNG_LABELS[after.rung],
+      detail: "Die nächste Sprechstufe ist frei",
+    });
   }
   if (after.band !== before.band && BANDS.indexOf(after.band) > BANDS.indexOf(before.band)) {
     events.push({

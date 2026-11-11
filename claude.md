@@ -27,6 +27,8 @@ Research (read before building):
 - gamification-strategy.md — motivation mechanics to adopt and refuse
 - technology.md — stack, fallbacks, colour scheme and visual direction
 - agent-memory.md — running decision log; append decisions there
+- docs/v5-architecture.md — the v5.5 product contract (lines, stations, the station ritual, layer ownership)
+- docs/design-system.md — the Wegweiser design system (tokens, primitives, accessibility, NFRs)
 
 Ideas:
 

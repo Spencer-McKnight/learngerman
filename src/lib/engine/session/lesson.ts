@@ -19,9 +19,10 @@
 
 import type { Station } from "../../curriculum/types";
 import type { LearnerSnapshot, SkillId, SpeakingRung, SyntaxStage } from "../types";
+import { SPEAKING_RUNGS } from "../types";
 import type { LexiconIndex } from "../lexicon/coverage";
 import { analyzeCoverage } from "../lexicon/coverage";
-import { dueWords, isKnown, retrievability } from "../scheduler/scheduler";
+import { dueWords, retrievability } from "../scheduler/scheduler";
 import { itemDifficulty, pSuccess } from "../ability/elo";
 import { CURRICULUM, nextGrammarBite } from "../grammar/curriculum";
 import { CONTRASTS, nextContrast } from "../ear/hvpt";
@@ -99,17 +100,6 @@ const SECONDS = {
   depart: 40,
 };
 
-/** Beats that are never trimmed for time in station mode. */
-const CORE: ReadonlySet<StepKind> = new Set([
-  "arrive",
-  "scene",
-  "understand",
-  "words",
-  "speak",
-  "perform",
-  "depart",
-]);
-
 export interface ComposeOptions {
   mode?: LessonMode;
   /** How many times the learner has visited this station before. */
@@ -130,9 +120,6 @@ export function composeLesson(
   const budgetSeconds = snapshot.minutesPerSession * 60;
 
   const wordsById = new Map(snapshot.words.map((word) => [word.lexemeId, word]));
-  const knownIds = new Set(
-    snapshot.words.filter((word) => isKnown(word, now)).map((word) => word.lexemeId),
-  );
   const due = dueWords(snapshot.words, now);
   const dueIds = due.map((word) => word.lexemeId);
 
@@ -475,4 +462,33 @@ export function suggestStartStation(
           : 1;
   const first = stationIds.find((station) => station.lineNumber === line) ?? stationIds[0];
   return first.id;
+}
+
+/**
+ * Should the learner move up a speaking rung? Requires ≥ 10 attempts
+ * at the current rung with ≥ 80% recent success AND a speaking rating
+ * clear of the rung's ability floor — "nobody is pushed up a rung
+ * before the one below feels easy".
+ */
+export function nextSpeakingRung(
+  current: SpeakingRung,
+  recentOutcomes: boolean[],
+  speakingRating: number,
+): SpeakingRung {
+  const floors: Record<SpeakingRung, number> = {
+    shadowing: 0,
+    construct: 0.4,
+    scripted: 1.0,
+    "timed-recall": 1.6,
+    "free-conversation": 2.2,
+  };
+  const index = SPEAKING_RUNGS.indexOf(current);
+  const next = SPEAKING_RUNGS[index + 1];
+  if (!next) return current;
+  const recent = recentOutcomes.slice(-10);
+  const successRate = recent.length ? recent.filter(Boolean).length / recent.length : 0;
+  if (recent.length >= 10 && successRate >= 0.8 && speakingRating >= floors[next]) {
+    return next;
+  }
+  return current;
 }

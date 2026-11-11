@@ -55,12 +55,14 @@ export async function POST(request: Request) {
       stage: before.syntax.stage,
       masteredContrasts: before.ear.filter((c) => c.mastered).map((c) => c.contrastId),
       band: estimateCefr(before).band,
+      rung: before.speakingRung,
     },
     {
       knownCount: after.words.filter((word) => isKnown(word, after.now)).length,
       stage: after.syntax.stage,
       masteredContrasts: after.ear.filter((c) => c.mastered).map((c) => c.contrastId),
       band: estimateCefr(after).band,
+      rung: after.speakingRung,
     },
   );
   if (milestones.length > 0) {

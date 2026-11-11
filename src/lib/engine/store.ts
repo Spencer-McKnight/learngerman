@@ -81,6 +81,7 @@ export async function loadSnapshot(
       }),
     ),
     speakingRung: (profile.data?.speaking_rung ?? "shadowing") as SpeakingRung,
+    speakingOutcomes: (profile.data?.speaking_outcomes ?? []) as boolean[],
     coverageTarget: profile.data?.coverage_target ?? 0.95,
     inputMinutes: profile.data?.input_minutes ?? 0,
     minutesPerSession: profile.data?.minutes_per_session ?? 12,
@@ -161,11 +162,13 @@ export async function saveOutcome(
     );
   }
 
-  if (outcome.inputSeconds) {
+  if (outcome.inputSeconds || outcome.skill === "speaking") {
     writes.push(
       supabase.from("learner_profiles").upsert({
         user_id: userId,
         input_minutes: snapshot.inputMinutes,
+        speaking_rung: snapshot.speakingRung,
+        speaking_outcomes: snapshot.speakingOutcomes ?? [],
       }),
     );
   }

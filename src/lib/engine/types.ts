@@ -106,6 +106,8 @@ export interface LearnerSnapshot {
   grammar: GrammarState;
   ear: EarContrastState[];
   speakingRung: SpeakingRung;
+  /** Recent speaking-task outcomes (newest last, ≤ 20) — the rung promotion window. */
+  speakingOutcomes?: boolean[];
   /** Personal known-token coverage target for served content (0.90–0.97). */
   coverageTarget: number;
   /** Total minutes of German audio/text understood, for the input-hours track. */
