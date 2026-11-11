@@ -6,6 +6,7 @@ function isPublicPath(pathname: string) {
   return (
     pathname === "/login" ||
     pathname === "/api/health" ||
+    pathname === "/~offline" ||
     pathname.startsWith("/auth")
   );
 }

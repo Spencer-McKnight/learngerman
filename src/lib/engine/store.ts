@@ -18,6 +18,7 @@ import type {
 } from "./types";
 import { SKILLS } from "./types";
 import { initialSkills } from "./ability/elo";
+import type { StationProgress } from "../curriculum/types";
 
 function parseCard(raw: Record<string, unknown>): Card {
   return {
@@ -80,6 +81,7 @@ export async function loadSnapshot(
       }),
     ),
     speakingRung: (profile.data?.speaking_rung ?? "shadowing") as SpeakingRung,
+    speakingOutcomes: (profile.data?.speaking_outcomes ?? []) as boolean[],
     coverageTarget: profile.data?.coverage_target ?? 0.95,
     inputMinutes: profile.data?.input_minutes ?? 0,
     minutesPerSession: profile.data?.minutes_per_session ?? 12,
@@ -160,11 +162,13 @@ export async function saveOutcome(
     );
   }
 
-  if (outcome.inputSeconds) {
+  if (outcome.inputSeconds || outcome.skill === "speaking") {
     writes.push(
       supabase.from("learner_profiles").upsert({
         user_id: userId,
         input_minutes: snapshot.inputMinutes,
+        speaking_rung: snapshot.speakingRung,
+        speaking_outcomes: snapshot.speakingOutcomes ?? [],
       }),
     );
   }
@@ -233,4 +237,95 @@ export async function savePlacement(
       .upsert({ user_id: userId, placed: true, placement }),
   );
   await Promise.all(chunks);
+}
+
+/* ---------- Course progress (v5.5 "Linie") ---------- */
+
+
+export async function loadStationProgress(
+  supabase: SupabaseClient,
+): Promise<StationProgress[]> {
+  const { data } = await supabase
+    .from("lesson_progress")
+    .select("station_id, status, best_grade, visits, last_visited_at, passed_at");
+  return (data ?? []).map(
+    (row): StationProgress => ({
+      stationId: row.station_id,
+      status: row.status,
+      bestGrade: row.best_grade ?? null,
+      visits: row.visits,
+      lastVisitedAt: row.last_visited_at ?? null,
+      passedAt: row.passed_at ?? null,
+    }),
+  );
+}
+
+/** A visit begins: status at least "started", visits + 1. */
+export async function touchStation(
+  supabase: SupabaseClient,
+  userId: string,
+  stationId: string,
+  current: StationProgress | undefined,
+): Promise<void> {
+  await supabase.from("lesson_progress").upsert({
+    user_id: userId,
+    station_id: stationId,
+    status: current?.status === "passed" ? "passed" : "started",
+    best_grade: current?.bestGrade ?? null,
+    visits: (current?.visits ?? 0) + 1,
+    last_visited_at: new Date().toISOString(),
+    passed_at: current?.passedAt ?? null,
+  });
+}
+
+/** A visit ends with a performance grade; ≥ 2 (Hard) passes the station. */
+export async function completeStation(
+  supabase: SupabaseClient,
+  userId: string,
+  stationId: string,
+  grade: 1 | 2 | 3 | 4 | null,
+  current: StationProgress | undefined,
+): Promise<StationProgress> {
+  const passedNow = grade !== null && grade >= 2;
+  const passed = passedNow || current?.status === "passed";
+  const best = Math.max(grade ?? 0, current?.bestGrade ?? 0);
+  const row: StationProgress = {
+    stationId,
+    status: passed ? "passed" : "started",
+    bestGrade: best === 0 ? null : (best as 1 | 2 | 3 | 4),
+    visits: Math.max(1, current?.visits ?? 1),
+    lastVisitedAt: new Date().toISOString(),
+    passedAt: current?.passedAt ?? (passedNow ? new Date().toISOString() : null),
+  };
+  await supabase.from("lesson_progress").upsert({
+    user_id: userId,
+    station_id: row.stationId,
+    status: row.status,
+    best_grade: row.bestGrade,
+    visits: row.visits,
+    last_visited_at: row.lastVisitedAt,
+    passed_at: row.passedAt,
+  });
+  return row;
+}
+
+/** Placement past a line: its stations count as passed, honestly ungraded. */
+export async function placeThroughStations(
+  supabase: SupabaseClient,
+  userId: string,
+  stationIds: string[],
+): Promise<void> {
+  if (stationIds.length === 0) return;
+  const now = new Date().toISOString();
+  await supabase.from("lesson_progress").upsert(
+    stationIds.map((stationId) => ({
+      user_id: userId,
+      station_id: stationId,
+      status: "passed",
+      best_grade: null,
+      visits: 0,
+      last_visited_at: null,
+      passed_at: now,
+    })),
+  );
 }

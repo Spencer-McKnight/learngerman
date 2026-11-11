@@ -12,6 +12,7 @@ import { newWordState, reviewWord } from "./scheduler/scheduler";
 import { updateRating } from "./ability/elo";
 import { recordStageOutcome } from "./syntax/stages";
 import { emptyContrastState, recordEarOutcome } from "./ear/hvpt";
+import { nextSpeakingRung } from "./session/lesson";
 
 export function applyOutcome(
   snapshot: LearnerSnapshot,
@@ -70,5 +71,28 @@ export function applyOutcome(
   // 6. Input-hours track.
   const inputMinutes = snapshot.inputMinutes + (outcome.inputSeconds ?? 0) / 60;
 
-  return { ...snapshot, words, skills, syntax, ear, grammar, inputMinutes };
+  // 7. Speaking rung: every speaking outcome feeds the promotion window;
+  // the rung climbs only on sustained success plus an ability floor.
+  let speakingRung = snapshot.speakingRung;
+  let speakingOutcomes = snapshot.speakingOutcomes ?? [];
+  if (outcome.skill === "speaking") {
+    speakingOutcomes = [...speakingOutcomes.slice(-19), outcome.correct];
+    const promoted = nextSpeakingRung(speakingRung, speakingOutcomes, skills.speaking.rating);
+    if (promoted !== speakingRung) {
+      speakingRung = promoted;
+      speakingOutcomes = [];
+    }
+  }
+
+  return {
+    ...snapshot,
+    words,
+    skills,
+    syntax,
+    ear,
+    grammar,
+    inputMinutes,
+    speakingRung,
+    speakingOutcomes,
+  };
 }

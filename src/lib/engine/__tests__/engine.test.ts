@@ -4,7 +4,7 @@ import { SEED_LEXICON } from "../lexicon/seed";
 import { newWordBudget, newWordState, reviewWord, isDue, isKnown, dueWords } from "../scheduler/scheduler";
 import { initialSkills, pSuccess, targetDifficulty, updateRating } from "../ability/elo";
 import { buildVocabProbe, combinePlacement, parseCTest, scoreCTest, scoreVocabProbe, seedWordStates, CTEST_PASSAGES } from "../placement/placement";
-import { composeSession, nextSpeakingRung } from "../session/composer";
+import { nextSpeakingRung } from "../session/lesson";
 import { validateGenerated } from "../session/tasks";
 import { detectMilestones, estimateCefr, speechCoverageForVocab } from "../progress/milestones";
 import { applyOutcome } from "../apply";
@@ -107,57 +107,7 @@ describe("placement", () => {
   });
 });
 
-describe("session composer", () => {
-  it("fits the time budget and starts with content", () => {
-    const plan = composeSession(freshSnapshot(), index);
-    expect(plan.totalSeconds).toBeLessThanOrEqual(12 * 60);
-    expect(["story-read", "dialogue-read"]).toContain(plan.tasks[0].kind);
-    expect(plan.newLexemeIds.length).toBeGreaterThan(0);
-  });
-
-  it("halves the new-word budget when a grammar bite is served", () => {
-    const noBites = composeSession(freshSnapshot({ placed: true }), index, { seed: 2 });
-    const allSettled = Object.fromEntries(
-      ["articles-as-units", "sein-haben-present", "svo-basics", "negation-nicht-kein",
-       "gender-endings", "plural-patterns", "fronting-time"].map((id) => [id, "settled" as const]),
-    );
-    const withoutReady = composeSession(
-      freshSnapshot({ placed: true, grammar: { bites: allSettled } }),
-      index,
-      { seed: 2 },
-    );
-    const bitePlanned = noBites.tasks.some((task) => task.kind === "grammar-bite");
-    expect(bitePlanned).toBe(true);
-    expect(withoutReady.newLexemeIds.length).toBeGreaterThanOrEqual(noBites.newLexemeIds.length);
-  });
-
-  it("story targets include due words — reviews live inside content", () => {
-    const past = new Date("2026-01-01T12:00:00Z");
-    const words = ["trinken:V", "Kaffee:N", "heute:ADV"].map((id) =>
-      reviewWord(newWordState(id, past), 3, past),
-    );
-    const plan = composeSession(freshSnapshot({ words, placed: true }), index);
-    const story = plan.tasks[0];
-    expect(story.section).toBe("story");
-    expect(story.lexemeIds).toEqual(
-      expect.arrayContaining(["trinken:V", "Kaffee:N", "heute:ADV"]),
-    );
-    expect(plan.episodeSpec?.targetLemmas).toEqual(
-      expect.arrayContaining(["trinken:V", "Kaffee:N", "heute:ADV"]),
-    );
-  });
-
-  it("plans one episode that every content task draws from", () => {
-    const plan = composeSession(freshSnapshot(), index);
-    expect(plan.episodeSpec).not.toBeNull();
-    const sections = plan.tasks.filter((task) => task.section).map((task) => task.section);
-    expect(sections).toContain("story");
-    expect(sections).toContain("dialogue");
-    // Ear-only detours carry no generated content at all.
-    const ear = composeSession(freshSnapshot({ placed: true }), index, { mode: "ear" });
-    expect(ear.episodeSpec).toBeNull();
-  });
-
+describe("speaking rung", () => {
   it("speaking rung only advances on sustained success and ability", () => {
     expect(nextSpeakingRung("shadowing", [true, true, true], 1)).toBe("shadowing");
     expect(nextSpeakingRung("shadowing", Array(10).fill(true), 1)).toBe("construct");
@@ -262,28 +212,6 @@ describe("applyOutcome — the single state transition", () => {
   });
 });
 
-describe("session modes — small detours off the main path", () => {
-  it("review mode introduces nothing new and skips grammar", () => {
-    const plan = composeSession(freshSnapshot({ placed: true }), index, { mode: "review" });
-    expect(plan.newLexemeIds).toHaveLength(0);
-    expect(plan.tasks.every((task) => task.kind !== "grammar-bite")).toBe(true);
-    expect(plan.tasks.every((task) => task.kind !== "hvpt-pair")).toBe(true);
-  });
-
-  it("ear mode serves only a long HVPT drill", () => {
-    const plan = composeSession(freshSnapshot({ placed: true }), index, { mode: "ear" });
-    expect(plan.tasks).toHaveLength(1);
-    expect(plan.tasks[0].kind).toBe("hvpt-pair");
-    expect(plan.tasks[0].seconds).toBeGreaterThan(60);
-  });
-
-  it("speak mode keeps only speaking-side tasks", () => {
-    const plan = composeSession(freshSnapshot({ placed: true }), index, { mode: "speak" });
-    expect(plan.tasks.length).toBeGreaterThan(0);
-    expect(plan.tasks.every((task) => task.skill === "speaking")).toBe(true);
-  });
-});
-
 describe("grammar bite progression through outcomes", () => {
   it("moves a bite to practising on first encounter, settled after a correct drill", () => {
     const snapshot = freshSnapshot();
@@ -299,5 +227,23 @@ describe("grammar bite progression through outcomes", () => {
     expect(first.grammar.bites["articles-as-units"]).toBe("practising");
     const second = applyOutcome(first, outcome);
     expect(second.grammar.bites["articles-as-units"]).toBe("settled");
+  });
+});
+
+describe("speaking rung promotion through outcomes", () => {
+  it("climbs after ten strong speaking outcomes and resets the window", () => {
+    let snapshot = freshSnapshot({ skills: initialSkills(1.5) });
+    const outcome = {
+      taskKind: "shadow",
+      skill: "speaking" as const,
+      correct: true,
+      lexemeGrades: {},
+      difficulty: 0.5,
+    };
+    for (let i = 0; i < 9; i++) snapshot = applyOutcome(snapshot, outcome);
+    expect(snapshot.speakingRung).toBe("shadowing");
+    snapshot = applyOutcome(snapshot, outcome);
+    expect(snapshot.speakingRung).toBe("construct");
+    expect(snapshot.speakingOutcomes).toEqual([]);
   });
 });

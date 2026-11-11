@@ -1,7 +1,7 @@
 {
   "name": "Learn German",
-  "short_name": "Learn German",
-  "description": "An adaptive German tutor: comprehensible input at your exact level, honest progress, real spoken German.",
+  "short_name": "Deutsch",
+  "description": "A story-driven German course: real scenes from your new life in Germany, honest progress, real spoken German.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
@@ -9,12 +9,14 @@
   "orientation": "portrait",
   "background_color": "#f7f6f3",
   "theme_color": "#154889",
+  "lang": "de",
+  "categories": ["education"],
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ]
 }

@@ -6,8 +6,16 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CAN_DO, progressSummary, VOCAB_MILESTONES } from "@/lib/engine";
-import { loadSnapshot } from "@/lib/engine/store";
+import { loadSnapshot, loadStationProgress } from "@/lib/engine/store";
 import { computeStreak, type Streak } from "@/lib/streak";
+import {
+  currentStation,
+  LINES,
+  lineCompletion,
+  stationStatuses,
+  type StationProgress,
+  type StationStatus,
+} from "@/lib/curriculum";
 
 export interface MilestoneRow {
   kind: string;
@@ -23,13 +31,19 @@ export interface ProgressBundle {
   canDo: string[];
   vocabMilestones: typeof VOCAB_MILESTONES;
   placed: boolean;
+  /** The course: per-station progress, statuses, the station to play next. */
+  stations: StationProgress[];
+  statuses: Record<string, StationStatus>;
+  currentStationId: string;
+  /** Line id → share of stations passed. */
+  lines: Record<string, number>;
 }
 
 export async function getProgressBundle(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<ProgressBundle> {
-  const [snapshot, sessions, milestones] = await Promise.all([
+  const [snapshot, sessions, milestones, stations] = await Promise.all([
     loadSnapshot(supabase, userId),
     supabase
       .from("sessions")
@@ -42,6 +56,7 @@ export async function getProgressBundle(
       .select("kind, label, detail, achieved_at")
       .order("achieved_at", { ascending: false })
       .limit(12),
+    loadStationProgress(supabase),
   ]);
   const activeDays = [
     ...new Set(
@@ -58,5 +73,9 @@ export async function getProgressBundle(
     canDo: CAN_DO[progress.cefr.band],
     vocabMilestones: VOCAB_MILESTONES,
     placed: snapshot.placed,
+    stations,
+    statuses: Object.fromEntries(stationStatuses(stations)),
+    currentStationId: currentStation(stations).id,
+    lines: Object.fromEntries(LINES.map((line) => [line.id, lineCompletion(line, stations)])),
   };
 }

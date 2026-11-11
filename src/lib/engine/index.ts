@@ -13,7 +13,7 @@
  *   ear/        HVPT minimal-pair training with per-contrast mastery
  *   placement/  LexTALE-style probe, C-test, initial state seeding
  *   scoring/    typed-answer, sentence and speech (WER) scoring
- *   session/    task specs, LLM generation contracts, session composer
+ *   session/    task specs, the coverage contract, the lesson composer
  *   progress/   honest metrics, CEFR estimation, milestone detection
  *   apply.ts    the single pure state transition for graded outcomes
  */
@@ -33,7 +33,5 @@ export * from "./placement/placement";
 export * from "./scoring/text";
 export * from "./scoring/speech";
 export * from "./session/tasks";
-export * from "./session/episode";
-export * from "./session/fallback-episodes";
-export * from "./session/composer";
+export * from "./session/lesson";
 export * from "./progress/milestones";

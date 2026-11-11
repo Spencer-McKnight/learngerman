@@ -49,3 +49,25 @@ describe("computeStreak", () => {
     expect(streak.length).toBe(2);
   });
 });
+
+describe("recentDays", () => {
+  const today = "2026-11-06";
+  const now = new Date(`${today}T12:00:00Z`);
+
+  it("marks active days, a bridged gap as frozen, and today without a session", async () => {
+    const { recentDays } = await import("../streak");
+    const dots = recentDays(["2026-11-05", "2026-11-03", "2026-11-02"], now);
+    expect(dots).toHaveLength(7);
+    expect(dots.map((d) => d.day)[0]).toBe("2026-10-31");
+    expect(dots.find((d) => d.day === "2026-11-04")?.state).toBe("frozen");
+    expect(dots.find((d) => d.day === "2026-11-05")?.state).toBe("active");
+    expect(dots.find((d) => d.day === "2026-11-01")?.state).toBe("missed");
+    expect(dots.find((d) => d.day === today)?.state).toBe("today");
+  });
+
+  it("treats yesterday as frozen when the day before was active, even before today's session", async () => {
+    const { recentDays } = await import("../streak");
+    const dots = recentDays(["2026-11-04"], now);
+    expect(dots.find((d) => d.day === "2026-11-05")?.state).toBe("frozen");
+  });
+});

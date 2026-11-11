@@ -5,37 +5,44 @@ import { PrefsBoot } from "@/components/prefs-boot";
 import { getUiLang } from "@/lib/i18n/server";
 import "./globals.css";
 
+/* Wegweiser type: Barlow (DIN-flavoured) for display, numbers and station
+ * names; Inter for body. Both self-hosted by next/font, swapped in without
+ * layout shift via size-adjusted fallbacks. */
 const display = Barlow({
-  variable: "--font-display",
+  variable: "--font-barlow",
   weight: ["500", "600", "700"],
   subsets: ["latin"],
+  display: "swap",
 });
 
 const body = Inter({
-  variable: "--font-body",
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "Learn German",
-    template: "%s · Learn German",
+    default: "Linie · Learn German",
+    template: "%s · Linie",
   },
   description:
-    "An adaptive German tutor: comprehensible input at your exact level, honest progress, real spoken German.",
+    "Linie: a story-driven German course through Erlangen — every station a scene from your new life, Jule Hartmann as your teacher, honest progress, real spoken German.",
+  applicationName: "Linie",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Learn German",
+    title: "Linie",
   },
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f4f1eb" },
-    { media: "(prefers-color-scheme: dark)", color: "#111318" },
+    { media: "(prefers-color-scheme: light)", color: "#f7f6f3" },
+    { media: "(prefers-color-scheme: dark)", color: "#16181d" },
   ],
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
@@ -46,7 +53,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       translate="no"
       className={`${display.variable} ${body.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-full flex-col bg-ground font-sans text-ink">
         <PrefsBoot />
         <I18nProvider lang={uiLang}>{children}</I18nProvider>
       </body>

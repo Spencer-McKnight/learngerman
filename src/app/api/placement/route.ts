@@ -11,13 +11,15 @@ import {
   scoreCTest,
   scoreVocabProbe,
   seedWordStates,
-  SEED_LEXICON,
+  suggestStartStation,
   analyzeProduction,
 } from "@/lib/engine";
 import type { SyntaxStage } from "@/lib/engine";
-import { savePlacement } from "@/lib/engine/store";
+import { placeThroughStations, savePlacement } from "@/lib/engine/store";
+import { COURSE_LEXICON, lineOf, STATIONS } from "@/lib/curriculum";
 
-const index = buildIndex(SEED_LEXICON);
+/** Placement probes the whole course lexicon, not just the seed. */
+const index = buildIndex(COURSE_LEXICON);
 
 /**
  * GET → the placement instrument: yes/no vocabulary probe (real flags
@@ -95,5 +97,18 @@ export async function POST(request: Request) {
     placedAt: now.toISOString(),
   });
 
-  return NextResponse.json({ placement, seededWords: words.length });
+  // Where the course starts: every station before the suggested one
+  // counts as passed, honestly ungraded (visits 0, no best grade).
+  const startId = suggestStartStation(
+    STATIONS.map((station) => ({ id: station.id, lineNumber: lineOf(station).number })),
+    { vocabEstimate: placement.vocabEstimate, stage: placement.stage },
+  );
+  const startIndex = STATIONS.findIndex((station) => station.id === startId);
+  await placeThroughStations(
+    supabase,
+    data.user.id,
+    STATIONS.slice(0, Math.max(0, startIndex)).map((station) => station.id),
+  );
+
+  return NextResponse.json({ placement, seededWords: words.length, startStationId: startId });
 }

@@ -1,148 +1,99 @@
 import { NextResponse } from "next/server";
-import { gateway, generateObject } from "ai";
+import { gateway, generateObject, NoObjectGeneratedError } from "ai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import {
-  buildIndex,
-  conversationReplySchema,
-  SEED_LEXICON,
-  validateGenerated,
-} from "@/lib/engine";
-import type { GenerationSpec } from "@/lib/engine";
-import {
-  aiCacheKey,
-  CHAT_MODEL,
-  gatewayOptions,
-  getCachedResponse,
-  putCachedResponse,
-} from "@/lib/ai";
-
-const index = buildIndex(SEED_LEXICON);
+import { stationById } from "@/lib/curriculum";
+import { validateGenerated, type GenerationSpec, type SyntaxStage } from "@/lib/engine";
+import { aiCacheKey, CHAT_MODEL, gatewayOptions, getCachedResponse, putCachedResponse } from "@/lib/ai";
+import { buildConversePrompt, converseReplySchema, type ConverseReply } from "@/lib/tutor/converse";
+import { allowedAtStation, loadTutorContext, TUTOR_INDEX } from "@/lib/tutor/load";
 
 const requestSchema = z.object({
-  allowedLemmas: z.array(z.string()),
-  /** Due lexemes the tutor should try to weave in. */
-  targetLemmas: z.array(z.string()),
-  stage: z.number().int().min(1).max(5),
-  coverageTarget: z.number().min(0.85).max(0.99),
-  /** The session's scene, so the conversation continues the episode. */
-  scene: z
-    .object({
-      title: z.string(),
-      settingEn: z.string(),
-    })
-    .optional(),
-  history: z
-    .array(z.object({ role: z.enum(["tutor", "learner"]), text: z.string() }))
-    .max(30),
+  stationId: z.string(),
+  history: z.array(z.object({ role: z.enum(["tutor", "learner"]), text: z.string().max(500) })).max(30),
+  /** Cast id from the station the tutor should play; defaults to Jule. */
+  counterpart: z.string().optional(),
 });
 
-const SYSTEM = `You are a friendly German conversation partner for one learner.
-Use ONLY allowed-list words (any inflected form), plus names and numbers.
-1–2 short casual sentences per turn; end with something the learner can answer.
-Warm and curious, never teacherly. Always provide replyEn as a natural translation.`;
-
 /**
- * POST → one tutor turn of free conversation, held to the coverage
- * contract like all generated content (one repair attempt, then 502).
- * The opener normally comes from the episode itself, so this route is
- * only reached once a real exchange is underway.
+ * POST → one turn of free conversation inside a station's situation,
+ * held to the coverage contract (one repair attempt, then an honest
+ * 502 the client already renders as "skip"). 503 without a key: there
+ * is no scripted stand-in for a live conversation partner.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   if (!process.env.AI_GATEWAY_API_KEY) {
-    return NextResponse.json(
-      { error: "AI_GATEWAY_API_KEY not configured — conversation offline" },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: "AI_GATEWAY_API_KEY not configured — conversation offline" }, { status: 503 });
   }
-  const parsed = requestSchema.safeParse(await request.json());
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.message }, { status: 400 });
-  }
-  const { allowedLemmas, targetLemmas, stage, coverageTarget, scene, history } = parsed.data;
+  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.message }, { status: 400 });
+  const { stationId, history, counterpart } = parsed.data;
+  const station = stationById(stationId);
+  if (!station) return NextResponse.json({ error: "unknown station" }, { status: 404 });
 
+  let allowed: Set<string>;
+  let stage: SyntaxStage;
+  let coverageTarget: number;
+  try {
+    const { snapshot } = await loadTutorContext(supabase, data.user.id);
+    allowed = allowedAtStation(station, snapshot);
+    // Receptive ceiling: the lower of what the station asks and what
+    // the learner has stabilised (stageConstraints adds the +1 itself).
+    stage = Math.min(station.stage, snapshot.syntax.stage) as SyntaxStage;
+    coverageTarget = snapshot.coverageTarget;
+  } catch (error) {
+    console.warn("[converse] learner context failed:", error);
+    return NextResponse.json({ error: "learner state unavailable" }, { status: 502 });
+  }
+
+  const { system, prompt: basePrompt, counterpart: who } = buildConversePrompt(
+    station, allowed, TUTOR_INDEX, stage, counterpart, history,
+  );
   const spec: GenerationSpec = {
     kind: "conversation-turn",
-    allowedLemmas,
+    allowedLemmas: [...allowed],
     targetLemmas: [],
     newLemmas: [],
-    stage: stage as GenerationSpec["stage"],
+    stage,
     coverageTarget,
     register: "colloquial",
   };
-  // Sorted allowed list leads the prompt as a stable prefix providers
-  // can prompt-cache; everything that changes per turn comes after.
-  const allowed = allowedLemmas
-    .map((id) => index.byId.get(id)?.lemma)
-    .filter((lemma): lemma is string => Boolean(lemma))
-    .sort((a, b) => a.localeCompare(b, "de"))
-    .join(", ");
-  const dueWords = targetLemmas
-    .map((id) => index.byId.get(id)?.lemma)
-    .filter(Boolean)
-    .join(", ");
-  // The tutor only needs recent context to reply; older turns just
-  // cost tokens.
-  const transcript = history
-    .slice(-12)
-    .map((turn) => `${turn.role === "tutor" ? "Du" : "Lernende:r"}: ${turn.text}`)
-    .join("\n");
-  const basePrompt = [
-    `Allowed words: ${allowed}`,
-    scene ? `You are chatting about this scene the learner just lived: "${scene.title}" — ${scene.settingEn}` : null,
-    dueWords ? `Weave in when natural: ${dueWords}` : null,
-    history.length === 0
-      ? "Open with a warm, simple question."
-      : `Conversation:\n${transcript}\n\nReply to the last turn.`,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
 
-  // Identical transcript + word lists → identical reply is fine; in
-  // practice this mostly dedupes conversation openers.
-  const key = aiCacheKey(CHAT_MODEL, "conversation-turn", SYSTEM, basePrompt);
-  const cached = await getCachedResponse(key);
-  if (cached) return NextResponse.json({ reply: cached, attempt: 0, cached: true });
+  // Identical transcript + vocabulary → identical reply; in practice
+  // this dedupes openers.
+  const key = aiCacheKey(CHAT_MODEL, "converse", system, basePrompt);
+  const cached = converseReplySchema.safeParse(await getCachedResponse(key));
+  if (cached.success) return NextResponse.json({ ...cached.data, counterpart: who.id, cached: true });
 
   let prompt = basePrompt;
   for (let attempt = 0; attempt < 2; attempt++) {
-    let object: z.infer<typeof conversationReplySchema>;
+    let reply: ConverseReply;
     try {
-      ({ object } = await generateObject({
+      ({ object: reply } = await generateObject({
         model: gateway(CHAT_MODEL),
-        system: SYSTEM,
+        system,
         prompt,
-        schema: conversationReplySchema,
+        schema: converseReplySchema,
         providerOptions: gatewayOptions(data.user.id),
       }));
     } catch (error) {
-      // Gateway/model failures (rate limits, outages) are expected in
-      // operation — return the same honest 502 the client already
-      // handles instead of a raw 500.
+      if (NoObjectGeneratedError.isInstance(error)) {
+        console.warn(`[converse] attempt ${attempt + 1} missed the schema:`, error.text?.slice(0, 200));
+        continue;
+      }
       console.warn("[converse] model call failed:", error);
-      return NextResponse.json(
-        { error: "model call failed; conversation unavailable" },
-        { status: 502 },
-      );
+      return NextResponse.json({ error: "model call failed; conversation unavailable" }, { status: 502 });
     }
-    const issues = validateGenerated(object.replyDe, spec, index);
+    const issues = validateGenerated(reply.replyDe, spec, TUTOR_INDEX);
     if (issues.length === 0) {
-      await putCachedResponse(key, CHAT_MODEL, "conversation-turn", object);
-      return NextResponse.json({ reply: object, attempt: attempt + 1 });
+      await putCachedResponse(key, CHAT_MODEL, "converse", reply);
+      return NextResponse.json({ ...reply, counterpart: who.id });
     }
-    console.warn(
-      `[converse] attempt ${attempt + 1} failed coverage contract:`,
-      issues.map((issue) => issue.detail).join(" | "),
-    );
-    prompt = `${basePrompt}\n\nYour previous reply broke these rules — fix them:\n${issues
-      .map((issue) => `- ${issue.detail}`)
-      .join("\n")}`;
+    console.warn(`[converse] attempt ${attempt + 1} failed the coverage contract:`, issues.map((i) => i.detail).join(" | "));
+    prompt = `${basePrompt}\n\nYour previous reply broke these rules — fix them:\n${issues.map((i) => `- ${i.detail}`).join("\n")}`;
   }
-  return NextResponse.json(
-    { error: "reply failed the coverage contract twice" },
-    { status: 502 },
-  );
+  return NextResponse.json({ error: "reply failed the coverage contract twice" }, { status: 502 });
 }
